@@ -44,6 +44,7 @@ class _FakeGateway implements McpGateway {
     required String intent,
     bool wait = true,
     int timeoutMs = 15000,
+    int maxChars = 8000,
   }) async {
     if (tabId != 'session-01') throw ArgumentError('Unknown session');
     sent = command;
@@ -52,7 +53,7 @@ class _FakeGateway implements McpGateway {
   }
 
   @override
-  Map<String, Object?> readOutput(String tabId, int cursor) => {
+  Map<String, Object?> readOutput(String tabId, int cursor, {int maxChars = 8000}) => {
     'output': 'ok',
     'cursor': cursor + 2,
     'status': 'running',
@@ -500,6 +501,26 @@ void main() {
       device(c, 'CORE-SW#', (cmd) => '\x1b[?25l\x1b[1mInterface\x1b[0m   Status  \x1b[K\r\nGi0/1   \x1b[32mup\x1b[0m\r\n\r\n\r\n\r\n\r\nend\r\n');
       final result = await gateway.sendCommand(tab, 'show int status', intent: 'read');
       expect(result['output'], 'Interface   Status\nGi0/1   up\n\nend');
+    });
+
+    test('past max_chars, the end of the output comes back, marked truncated', () async {
+      final (tab, c, _) = await open('c1');
+      final lines = [for (var i = 0; i < 400; i++) 'line $i'].join('\r\n');
+      device(c, 'CORE-SW#', (cmd) => '$lines\r\n');
+      final result = await gateway.sendCommand(tab, 'show log', intent: 'read', maxChars: 500);
+      final output = result['output'] as String;
+      expect(result['truncated'], isTrue);
+      expect(output.length, lessThanOrEqualTo(500));
+      expect(output, endsWith('line 399'), reason: 'the end is kept');
+      expect(output, isNot(contains('line 0\n')));
+
+      final short = await gateway.sendCommand(tab, 'show clock', intent: 'read');
+      expect(short['truncated'], isFalse);
+
+      final read = gateway.readOutput(tab, 0, maxChars: 300);
+      expect(read['truncated'], isTrue);
+      expect((read['output'] as String).length, lessThanOrEqualTo(300));
+      expect(read['cursor'], greaterThan(0));
     });
 
     test('wait: false keeps the old answer: just the cursor', () async {

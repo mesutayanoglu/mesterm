@@ -46,8 +46,9 @@ abstract class McpGateway {
     required String intent,
     bool wait = true,
     int timeoutMs = 15000,
+    int maxChars = 8000,
   });
-  Map<String, Object?> readOutput(String tabId, int cursor);
+  Map<String, Object?> readOutput(String tabId, int cursor, {int maxChars = 8000});
   Map<String, Object?> readScreen(String tabId, {int lines = 200});
   void close();
 }
@@ -207,6 +208,7 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     required String intent,
     bool wait = true,
     int timeoutMs = 15000,
+    int maxChars = 8000,
   }) async {
     if (command.isEmpty ||
         command.length > 4096 ||
@@ -262,13 +264,14 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
           if (i >= 0) b.lines[i].getText().trimRight(),
       ].join('\n')));
     }
+    final (text, cut) = keepTail(output, maxChars);
     return {
-      'output': output,
+      'output': text,
       'prompt': prompt,
       'config_mode': isConfigPrompt(prompt),
       'timed_out': timedOut,
       'status': c.status.name,
-      'truncated': false,
+      'truncated': cut,
       'cursor': capture?.end ?? 0,
       'asked_user': asked,
     };
@@ -403,11 +406,30 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   }
 
   @override
-  Map<String, Object?> readOutput(String tabId, int cursor) {
+  Map<String, Object?> readOutput(String tabId, int cursor, {int maxChars = 8000}) {
     final capture = _capture(tabId);
     if (capture == null) throw StateError('Use read_screen for this tab.');
-    final page = capture.read(cursor);
-    return {...page, 'output': cleanTerminalText(page['output'] as String)};
+    if (cursor < 0 || cursor > capture.end) throw ArgumentError('Invalid output cursor.');
+    // Everything since the cursor, as text; past [maxChars], its end.
+    final (text, cut) = keepTail(stripPager(cleanTerminalText(capture.textFrom(cursor))), maxChars);
+    return {
+      'output': text,
+      'cursor': capture.end,
+      'truncated': cut || cursor < capture.start,
+      'status': capture.controller.status.name,
+      if (capture.controller.lastError != null) 'error': capture.controller.lastError,
+    };
+  }
+
+  /// [text], or its last [maxChars] characters (from a line start where one
+  /// is near), and whether anything was cut.
+  static (String, bool) keepTail(String text, int maxChars) {
+    final limit = maxChars.clamp(100, 1000000);
+    if (text.length <= limit) return (text, false);
+    var tail = text.substring(text.length - limit);
+    final nl = tail.indexOf('\n');
+    if (nl >= 0 && nl < 200) tail = tail.substring(nl + 1);
+    return (tail, true);
   }
 
   @override
@@ -449,9 +471,11 @@ class _CapturedSession {
   String _output = '';
   int _start = 0;
   static const _retain = 65536;
-  static const _page = 8192;
 
   int get end => _start + _output.length;
+
+  /// The oldest offset still kept.
+  int get start => _start;
 
   /// Everything from [cursor] on (or from the oldest kept, if it is older).
   String textFrom(int cursor) => _output.substring((max(cursor, _start) - _start).clamp(0, _output.length));
@@ -463,22 +487,6 @@ class _CapturedSession {
       _output = _output.substring(drop);
       _start += drop;
     }
-  }
-
-  Map<String, Object?> read(int cursor) {
-    if (cursor < 0 || cursor > end) {
-      throw ArgumentError('Invalid output cursor.');
-    }
-    final actual = max(cursor, _start);
-    final next = min(actual + _page, end);
-    return {
-      'output': _output.substring(actual - _start, next - _start),
-      'cursor': next,
-      'has_more': next < end,
-      'truncated': cursor < _start,
-      'status': controller.status.name,
-      if (controller.lastError != null) 'error': controller.lastError,
-    };
   }
 
   void close() => unawaited(_subscription.cancel());
@@ -694,6 +702,8 @@ class McpServer extends ChangeNotifier {
         case 'send_command':
           final wait = args['wait'] ?? true;
           final timeout = args['timeout_ms'] ?? 15000;
+          final maxChars = args['max_chars'] ?? 8000;
+          if (maxChars is! int) throw ArgumentError('max_chars must be an integer.');
           if (wait is! bool) throw ArgumentError('wait must be true or false.');
           if (timeout is! int) throw ArgumentError('timeout_ms must be an integer.');
           value = await gateway.sendCommand(
@@ -702,12 +712,15 @@ class McpServer extends ChangeNotifier {
             intent: _string(args, 'intent'),
             wait: wait,
             timeoutMs: timeout,
+            maxChars: maxChars,
           );
           break;
         case 'read_output':
           final cursor = args['cursor'] ?? 0;
           if (cursor is! int) throw ArgumentError('cursor must be an integer.');
-          value = gateway.readOutput(_string(args, 'tab_id'), cursor);
+          final maxChars = args['max_chars'] ?? 8000;
+          if (maxChars is! int) throw ArgumentError('max_chars must be an integer.');
+          value = gateway.readOutput(_string(args, 'tab_id'), cursor, maxChars: maxChars);
           break;
         case 'read_screen':
           final lines = args['lines'] ?? 200;
@@ -799,6 +812,7 @@ class McpServer extends ChangeNotifier {
           },
           'wait': {'type': 'boolean', 'default': true},
           'timeout_ms': {'type': 'integer', 'default': 15000, 'minimum': 100},
+          'max_chars': {'type': 'integer', 'default': 8000, 'minimum': 100},
         },
         'required': ['tab_id', 'command', 'intent'],
       },
@@ -811,6 +825,7 @@ class McpServer extends ChangeNotifier {
         'properties': {
           'tab_id': {'type': 'string'},
           'cursor': {'type': 'integer', 'minimum': 0},
+          'max_chars': {'type': 'integer', 'default': 8000, 'minimum': 100},
         },
         'required': ['tab_id'],
       },
