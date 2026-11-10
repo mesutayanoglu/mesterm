@@ -35,7 +35,9 @@ class McpApproval {
 /// else, and anything at a configuration prompt, waits for the user's yes.
 /// Usernames and passwords are never in a tool result.
 abstract class McpGateway {
-  List<Map<String, Object?>> listConnections();
+  /// Saved connections matching the filters, at most [limit] of them, with
+  /// `total` (all that match) and `returned`.
+  Map<String, Object?> listConnections({String? folder, String? query, String? protocol, String? device, int limit = 50});
   List<Map<String, Object?>> listSessions();
   Future<String> openConnection(String connectionId);
   Future<Map<String, Object?>> sendCommand(
@@ -105,19 +107,34 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   }
 
   @override
-  List<Map<String, Object?>> listConnections() => [
-    for (final c in app.connections)
-      {
+  Map<String, Object?> listConnections({String? folder, String? query, String? protocol, String? device, int limit = 50}) {
+    bool has(String? haystack, String? needle) =>
+        needle == null || needle.trim().isEmpty || (haystack ?? '').toLowerCase().contains(needle.trim().toLowerCase());
+    bool same(String? value, String? wanted) =>
+        wanted == null || wanted.trim().isEmpty || (value ?? '').toLowerCase() == wanted.trim().toLowerCase();
+    final matches = <Map<String, Object?>>[];
+    for (final c in app.connections) {
+      final path = _folderPath(c.folderId);
+      final kind = DeviceIcon.of(c)?.name;
+      if (!has(path, folder)) continue;
+      if (!(has(c.name, query) || has(c.host, query))) continue;
+      if (!same(c.protocol.name, protocol) || !same(kind, device)) continue;
+      final tabs = [for (final t in app.tabs) if (t.connectionId == c.id) t.id];
+      // Empty fields are left out: every byte is the agent's tokens.
+      matches.add({
         'id': c.id,
         'name': c.name,
-        'folder': _folderPath(c.folderId),
+        if (path.isNotEmpty) 'folder': path,
         'protocol': c.protocol.name,
-        'host': c.host,
+        if (c.host.isNotEmpty) 'host': c.host,
         'port': c.port,
-        if (DeviceIcon.of(c) case final kind?) 'device': kind.name,
-        'open_tabs': [for (final t in app.tabs) if (t.connectionId == c.id) t.id],
-      },
-  ];
+        'device': ?kind,
+        if (tabs.isNotEmpty) 'open_tabs': tabs,
+      });
+    }
+    final shown = matches.take(limit.clamp(1, 1000)).toList();
+    return {'connections': shown, 'total': matches.length, 'returned': shown.length};
+  }
 
   @override
   List<Map<String, Object?>> listSessions() => [
@@ -652,7 +669,21 @@ class McpServer extends ChangeNotifier {
       Object? value;
       switch (name) {
         case 'list_connections':
-          value = {'connections': gateway.listConnections()};
+          String? opt(String key) {
+            final v = args[key];
+            if (v == null) return null;
+            if (v is! String) throw ArgumentError('$key must be a string.');
+            return v;
+          }
+          final limit = args['limit'] ?? 50;
+          if (limit is! int) throw ArgumentError('limit must be an integer.');
+          value = gateway.listConnections(
+            folder: opt('folder'),
+            query: opt('query'),
+            protocol: opt('protocol'),
+            device: opt('device'),
+            limit: limit,
+          );
           break;
         case 'list_sessions':
           value = {'sessions': gateway.listSessions()};
@@ -727,7 +758,16 @@ class McpServer extends ChangeNotifier {
     {
       'name': 'list_connections',
       'description': 'Every saved connection: id, name, folder path, protocol, host, port, device kind, and the tabs it is open in. Usernames and passwords are not included.',
-      'inputSchema': {'type': 'object', 'properties': <String, Object>{}},
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'folder': {'type': 'string'},
+          'query': {'type': 'string'},
+          'protocol': {'type': 'string'},
+          'device': {'type': 'string'},
+          'limit': {'type': 'integer', 'default': 50, 'minimum': 1},
+        },
+      },
     },
     {
       'name': 'list_sessions',

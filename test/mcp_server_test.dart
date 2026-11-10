@@ -18,9 +18,13 @@ class _FakeGateway implements McpGateway {
   String? sentIntent;
 
   @override
-  List<Map<String, Object?>> listConnections() => [
-    {'id': 'device-01', 'name': 'DEVICE-01'},
-  ];
+  Map<String, Object?> listConnections({String? folder, String? query, String? protocol, String? device, int limit = 50}) => {
+    'connections': [
+      {'id': 'device-01', 'name': 'DEVICE-01'},
+    ],
+    'total': 1,
+    'returned': 1,
+  };
 
   @override
   List<Map<String, Object?>> listSessions() => [
@@ -266,13 +270,37 @@ void main() {
     }
 
     test('every connection is listed, with its folder and host; never a username or password', () async {
-      final listed = gateway.listConnections();
+      final listed = gateway.listConnections()['connections'] as List<Map<String, Object?>>;
       expect(listed.map((c) => c['name']), ['CORE-SW', 'EDGE-FW']);
       expect(listed.first['folder'], 'CUSTOMER-A');
       expect(listed.first['host'], '192.0.2.1');
       final json = jsonEncode(listed);
       expect(json, isNot(contains('user1')));
       expect(json, isNot(contains('secret-1')));
+    });
+
+    test('connections can be filtered; empty fields are left out; total and returned are counted', () async {
+      app.connections.add(SavedConnection(id: 'c3', name: 'CORE-SW-2', host: '198.51.100.3', folderId: 'f1', protocol: ConnectionProtocol.rdp));
+      Map<String, Object?> list({String? folder, String? query, String? protocol, String? device, int limit = 50}) =>
+          gateway.listConnections(folder: folder, query: query, protocol: protocol, device: device, limit: limit);
+      List<String?> names(Map<String, Object?> r) => [for (final c in r['connections'] as List) (c as Map)['name'] as String?];
+
+      expect(names(list(folder: 'customer-a')), ['CORE-SW', 'CORE-SW-2'], reason: 'any case, part of the path');
+      expect(names(list(query: '192.0.2.2')), ['EDGE-FW'], reason: 'by host');
+      expect(names(list(query: 'core')), ['CORE-SW', 'CORE-SW-2'], reason: 'by name');
+      expect(names(list(protocol: 'RDP')), ['CORE-SW-2']);
+      expect(names(list(device: 'windows')), ['CORE-SW-2'], reason: 'RDP shows as Windows');
+      final limited = list(limit: 1);
+      expect(limited['total'], 3);
+      expect(limited['returned'], 1);
+
+      final edge = (list(query: 'EDGE')['connections'] as List).single as Map;
+      expect(edge.containsKey('folder'), isFalse, reason: 'no folder: left out');
+      expect(edge.containsKey('open_tabs'), isFalse, reason: 'no tabs: left out');
+      expect(edge.containsKey('device'), isFalse);
+      await gateway.openConnection('c1');
+      final core = (list(query: 'CORE-SW', folder: 'customer')['connections'] as List).first as Map;
+      expect(core['open_tabs'], hasLength(1));
     });
 
     test('a read the app also knows as read-only runs without asking', () async {
