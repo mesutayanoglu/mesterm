@@ -155,26 +155,6 @@ class _PaletteButton extends StatelessWidget {
                       style: TextStyle(fontSize: 12.5, color: dim),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // The keys as a quiet tag inside the box, not a second
-                  // outlined box squeezed into it.
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: dark ? AppColors.darkPanelAlt : AppColors.lightBorder,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      AppShortcuts.label(AppCommand.palette),
-                      style: TextStyle(
-                        fontSize: 11,
-                        height: 1.2,
-                        fontFamily: 'Consolas',
-                        fontFamilyFallback: const ['Menlo', 'monospace'],
-                        color: dark ? const Color(0xFFB5B5B5) : const Color(0xFF3D3D3D),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),

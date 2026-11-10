@@ -41,11 +41,17 @@ class McpApprovalDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(tr('The connected agent wants to run this on {name}.', {'name': approval.connectionName})),
+            const SizedBox(height: 6),
             Text(
-              tr('The connected agent wants to run this on {name} (shown to it as {alias}).', {
-                'name': approval.connectionName,
-                'alias': approval.alias,
-              }),
+              switch (approval.reason) {
+                ChangeReason.agentSaysChange => tr('The agent says this command changes something.'),
+                ChangeReason.configMode => tr('The device is in configuration mode.'),
+                ChangeReason.chained => tr('It runs more than one command, or writes to a file.'),
+                ChangeReason.unknown => tr('MesTerm does not know this as a read-only command.'),
+              },
+              key: const ValueKey('mcp-reason'),
+              style: TextStyle(fontSize: 12.5, color: dim),
             ),
             const SizedBox(height: 12),
             Container(

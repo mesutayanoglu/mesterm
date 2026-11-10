@@ -6,6 +6,7 @@ import 'package:mesterm/services/session_controller.dart';
 import 'package:mesterm/services/update_service.dart';
 import 'package:mesterm/theme/app_theme.dart';
 import 'package:mesterm/widgets/status_bar.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -125,23 +126,38 @@ void main() {
     expect(app.tabs[app.activeTabIndex].id, '3');
   });
 
-  testWidgets('the status bar names the active session, and says when there is none', (tester) async {
+  testWidgets('the status bar names the active session, says when there is none, and shows no size or hints', (tester) async {
     final app = await _pumpHome(tester);
     expect(find.byKey(const ValueKey('status-bar')), findsOneWidget);
     expect(find.text('No open sessions'), findsOneWidget);
-    expect(find.byKey(const ValueKey('status-bar-hints')), findsOneWidget);
-    expect(find.text(AppShortcuts.label(AppCommand.palette)), findsWidgets);
+    expect(find.byKey(const ValueKey('status-bar-hints')), findsNothing, reason: 'no shortcut hints');
+    expect(find.text(AppShortcuts.label(AppCommand.palette)), findsNothing);
 
     app.tabs.add(OpenTab(id: 'a', controller: _FakeSession('198.51.100.7', SessionStatus.starting)));
     app.setActiveTab(0);
     await tester.pump();
     expect(find.text('Connecting'), findsOneWidget);
     expect(find.descendant(of: find.byType(StatusBar), matching: find.text('198.51.100.7')), findsOneWidget);
+    expect(find.descendant(of: find.byType(StatusBar), matching: find.textContaining('UTF-8')), findsNothing);
+    expect(find.descendant(of: find.byType(StatusBar), matching: find.textContaining('×')), findsNothing);
   });
 
   test('shortcut labels read as typed', () {
     expect(AppShortcuts.label(AppCommand.palette), 'Ctrl+Shift+P');
     expect(AppShortcuts.label(AppCommand.nextTab), 'Ctrl+Tab');
     expect(AppShortcuts.label(AppCommand.settings), 'Ctrl+,');
+  });
+
+  testWidgets('with two tabs, a tab\'s menu offers Split view', (tester) async {
+    final app = await _pumpHome(tester);
+    app.tabs.add(OpenTab(id: 'a', controller: _FakeSession('192.0.2.1')));
+    app.tabs.add(OpenTab(id: 'b', controller: _FakeSession('192.0.2.2')));
+    app.setActiveTab(0);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('192.0.2.1').first, buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Split view…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Split View'), findsWidgets, reason: 'the split view dialog');
   });
 }

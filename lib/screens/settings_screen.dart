@@ -201,7 +201,7 @@ class _McpPanel extends StatelessWidget {
                 children: [
                   Text(tr('Allow MCP access')),
                   const SizedBox(height: 4),
-                  Text(tr('Lets a connected agent open saved SSH connections, send commands, and read terminal output.'),
+                  Text(tr('Lets a connected agent read MesTerm, open connections and run commands. Changes ask you first.'),
                       style: TextStyle(fontSize: 12, color: secondary)),
                 ],
               ),
@@ -229,38 +229,39 @@ class _McpPanel extends StatelessWidget {
         ],
         if (server.enabled) ...[
           const SizedBox(height: 16),
-          Text(tr('Allowed connections'), style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(tr('What the agent can do'), style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(
-            tr('Right-click a connection in the list to allow it. The agent sees only the anonymous name. Every command asks you first. Terminal output is sent as it is, so it can still show device names and addresses.'),
+            tr(
+              'It sees every saved connection, folder and open tab, and reads every terminal. It can open connections and run commands. A command it marks as a read, and that MesTerm also knows as read-only (show, display, get, ping...), runs at once; anything else, and anything at a configuration prompt, asks you first. Usernames and passwords are never shared.',
+            ),
             style: TextStyle(fontSize: 12, color: secondary),
           ),
-          const SizedBox(height: 8),
           if (server.gateway case final AppMcpGateway gateway)
             ListenableBuilder(
               listenable: gateway,
-              builder: (context, _) {
-                final allowed = gateway.allowedConnections.toList();
-                if (allowed.isEmpty) {
-                  return Text(tr('None yet.'), style: TextStyle(fontSize: 12, color: secondary));
-                }
-                return Column(
+              builder: (context, _) => Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(
                   children: [
-                    for (final c in allowed)
-                      Row(
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: Text(c.name, overflow: TextOverflow.ellipsis)),
-                          Text(gateway.aliasOf(c.id)!, style: TextStyle(fontSize: 12, color: secondary)),
-                          IconButton(
-                            tooltip: tr('Remove access'),
-                            icon: const Icon(Icons.close, size: 16),
-                            onPressed: () => gateway.setAllowed(c.id, false),
-                          ),
+                          Text(tr('Ask before every command')),
+                          const SizedBox(height: 2),
+                          Text(tr('Read-only commands ask too.'), style: TextStyle(fontSize: 12, color: secondary)),
                         ],
                       ),
+                    ),
+                    Switch(
+                      key: const ValueKey('mcp-ask-all'),
+                      value: gateway.askEveryCommand,
+                      onChanged: gateway.setAskEveryCommand,
+                    ),
                   ],
-                );
-              },
+                ),
+              ),
             ),
         ],
         if (server.error case final error?) ...[

@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const approval = McpApproval(connectionName: 'CUSTOMER-A SWITCH', alias: 'DEVICE-01', command: 'show version');
+  const approval = McpApproval(connectionName: 'CUSTOMER-A SWITCH', command: 'show version', reason: ChangeReason.configMode);
   final key = GlobalKey<NavigatorState>();
 
   Future<Future<bool>> ask(WidgetTester tester) async {
@@ -23,6 +23,7 @@ void main() {
     final answer = await ask(tester);
     expect(find.text('show version'), findsOneWidget);
     expect(find.textContaining('CUSTOMER-A SWITCH'), findsOneWidget);
+    expect(find.text('The device is in configuration mode.'), findsOneWidget, reason: 'says why it asks');
     await tester.tap(find.byKey(const ValueKey('mcp-allow')));
     await tester.pumpAndSettle();
     expect(await answer, isTrue);

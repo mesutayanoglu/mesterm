@@ -80,18 +80,33 @@ remembers the setting across launches.
   ID to a private ChatGPT Work plugin. The desktop app and tunnel must be
   running for commands to reach MesTerm.
 
-Only SSH connections you allow one by one (right-click a connection) are
-offered, under anonymous names such as `DEVICE-01`. Every command asks you in
-MesTerm before it runs; no answer within two minutes is a no. Terminal output
-is sent as it is, so it can still show device names and addresses.
+When MCP access is on, the agent sees the whole app: every saved connection
+(name, folder, protocol, host, port, device kind), every open tab and every
+terminal. Usernames and passwords are never in a tool result.
 
-The tools list the allowed connections, open one in a MesTerm tab, send one
-command line followed by Enter, and read terminal output. `send_command`
-returns a cursor; pass it to `read_output`, then keep using each returned
-cursor. Terminal output arrives asynchronously, so an empty read does not
-mean the remote command has finished. The tools do not expose stored hosts or
-credentials, and they do not support RDP or serial sessions. The connected
-agent can execute commands with the selected SSH connection's privileges.
+Commands are checked from both sides. With each command the agent says
+whether it only reads (`intent: "read"`) or changes something
+(`intent: "change"`), and MesTerm checks the command itself:
+
+- It runs at once only when the agent calls it a read **and** MesTerm knows
+  it as read-only: `show`, `display`, `get`, `ping`, `traceroute`, filters
+  after `|` such as `include` or `grep`, and read-only Linux and Windows
+  commands (`ls`, `cat`, `ip a`, `systemctl status`, `ipconfig /all`...).
+- Anything else asks you in MesTerm first: a change, a command MesTerm does
+  not know, anything chained or redirected (`;`, `&&`, `>`, backticks), and
+  any command typed at a configuration prompt (`(config)#`, `[edit]`,
+  Huawei system-view, Fortinet `(...) #`). No answer within two minutes is
+  a no.
+- **Settings > MCP integration > Ask before every command** makes reads ask
+  too.
+
+The tools: `list_connections`, `list_sessions`, `open_connection`,
+`send_command` (`tab_id`, `command`, `intent`), `read_output` (an SSH tab's
+output from a cursor) and `read_screen` (any terminal's text, its prompt and
+whether that is a configuration prompt). `send_command` returns a cursor;
+pass it to `read_output` and keep using each returned cursor. Output arrives
+asynchronously, so an empty read does not mean the command has finished.
+RDP tabs are listed but cannot be read.
 
 When configuring the tunnel client, set `MCP_SERVER_URL` to the displayed URL
 from a local secret store. Configure the tunnel ID and runtime key as described

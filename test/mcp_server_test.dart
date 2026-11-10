@@ -15,10 +15,16 @@ import 'package:mesterm/services/mcp_server.dart';
 
 class _FakeGateway implements McpGateway {
   String? sent;
+  String? sentIntent;
 
   @override
-  List<Map<String, String>> listConnections() => [
+  List<Map<String, Object?>> listConnections() => [
     {'id': 'device-01', 'name': 'DEVICE-01'},
+  ];
+
+  @override
+  List<Map<String, Object?>> listSessions() => [
+    {'tab_id': 'session-01', 'title': 'DEVICE-01'},
   ];
 
   @override
@@ -28,18 +34,22 @@ class _FakeGateway implements McpGateway {
   }
 
   @override
-  Future<int> sendCommand(String sessionId, String command) async {
-    if (sessionId != 'session-01') throw ArgumentError('Unknown session');
+  Future<Map<String, Object?>> sendCommand(String tabId, String command, {required String intent}) async {
+    if (tabId != 'session-01') throw ArgumentError('Unknown session');
     sent = command;
-    return 5;
+    sentIntent = intent;
+    return {'cursor': 5, 'asked_user': false};
   }
 
   @override
-  Map<String, Object?> readOutput(String sessionId, int cursor) => {
+  Map<String, Object?> readOutput(String tabId, int cursor) => {
     'output': 'ok',
     'cursor': cursor + 2,
     'status': 'running',
   };
+
+  @override
+  Map<String, Object?> readScreen(String tabId, {int lines = 200}) => {'text': 'DEVICE-01#', 'prompt': 'DEVICE-01#'};
 
   @override
   void close() {}
@@ -113,6 +123,8 @@ void main() {
         'open_connection',
         'send_command',
         'read_output',
+        'list_sessions',
+        'read_screen',
       ]),
     );
 
@@ -143,9 +155,13 @@ void main() {
     final sent = await call(5, 'send_command', {
       'tab_id': 'session-01',
       'command': 'show version',
+      'intent': 'read',
     });
     expect(sent['cursor'], 5);
     expect(gateway.sent, 'show version');
+    expect(gateway.sentIntent, 'read');
+    final screen = await call(7, 'read_screen', {'tab_id': 'session-01'});
+    expect(screen['prompt'], 'DEVICE-01#');
     final output = await call(6, 'read_output', {
       'tab_id': 'session-01',
       'cursor': 5,
@@ -209,9 +225,11 @@ void main() {
       PtySessionController.checkReachability = false;
       app = AppState();
       await Future<void>.delayed(const Duration(milliseconds: 20));
+      final folder = ConnectionFolder(id: 'f1', name: 'CUSTOMER-A');
+      app.folders = [folder];
       app.connections = [
-        SavedConnection(id: 'c1', name: 'CUSTOMER-A SWITCH', host: '192.0.2.1', username: 'user1'),
-        SavedConnection(id: 'c2', name: 'CUSTOMER-B FIREWALL', host: '192.0.2.2'),
+        SavedConnection(id: 'c1', name: 'CORE-SW', host: '192.0.2.1', username: 'user1', password: 'secret-1', folderId: 'f1'),
+        SavedConnection(id: 'c2', name: 'EDGE-FW', host: '192.0.2.2'),
       ];
       asked = [];
       answer = true;
@@ -229,68 +247,104 @@ void main() {
       PtySessionController.checkReachability = true;
     });
 
-    test('lists only allowed connections, under anonymous names', () async {
-      expect(gateway.listConnections(), isEmpty);
-      await gateway.setAllowed('c2', true);
-      final listed = gateway.listConnections();
-      expect(listed, [
-        {'id': 'DEVICE-01', 'name': 'DEVICE-01'},
-      ]);
-      expect(jsonEncode(listed), isNot(contains('CUSTOMER')));
-      expect(jsonEncode(listed), isNot(contains('192.0.2')));
-    });
-
-    test('a connection not allowed cannot be opened, by alias or real id', () async {
-      await gateway.setAllowed('c1', true);
-      expect(() => gateway.openConnection('c2'), throwsArgumentError);
-      expect(() => gateway.openConnection('c1'), throwsArgumentError, reason: 'real ids are not names it knows');
-      expect(() => gateway.openConnection('DEVICE-02'), throwsArgumentError);
-    });
-
-    test('every command waits for the user; a no sends nothing', () async {
-      await gateway.setAllowed('c1', true);
-      final session = await gateway.openConnection('DEVICE-01');
-      final controller = app.tabs.last.controller as PtySessionController;
+    Future<(String, PtySessionController, List<String>)> open(String id) async {
+      final tab = await gateway.openConnection(id);
+      final c = app.tabs.last.controller as PtySessionController;
       final sent = <String>[];
-      controller.writeOverride = sent.add;
+      c.writeOverride = sent.add;
+      return (tab, c, sent);
+    }
 
-      answer = false;
-      await expectLater(gateway.sendCommand(session, 'reload'), throwsStateError);
-      expect(sent, isEmpty);
-      expect(asked.single.connectionName, 'CUSTOMER-A SWITCH', reason: 'the real name is shown to the user only');
-      expect(asked.single.alias, 'DEVICE-01');
-
-      answer = true;
-      await gateway.sendCommand(session, 'show version');
-      expect(sent, ['show version\r']);
+    test('every connection is listed, with its folder and host; never a username or password', () async {
+      final listed = gateway.listConnections();
+      expect(listed.map((c) => c['name']), ['CORE-SW', 'EDGE-FW']);
+      expect(listed.first['folder'], 'CUSTOMER-A');
+      expect(listed.first['host'], '192.0.2.1');
+      final json = jsonEncode(listed);
+      expect(json, isNot(contains('user1')));
+      expect(json, isNot(contains('secret-1')));
     });
 
-    test('with no way to ask, nothing runs', () async {
-      final silent = AppMcpGateway(app);
-      await silent.load();
-      await silent.setAllowed('c1', true);
-      final session = await silent.openConnection('DEVICE-01');
-      await expectLater(silent.sendCommand(session, 'show version'), throwsStateError);
-      silent.close();
-    });
-
-    test('taking access away ends it for an open session', () async {
-      await gateway.setAllowed('c1', true);
-      final session = await gateway.openConnection('DEVICE-01');
-      await gateway.setAllowed('c1', false);
-      expect(() => gateway.readOutput(session, 0), throwsStateError);
-      await expectLater(gateway.sendCommand(session, 'show version'), throwsStateError);
+    test('a read the app also knows as read-only runs without asking', () async {
+      final (tab, _, sent) = await open('c1');
+      final result = await gateway.sendCommand(tab, 'show ip interface brief | include up', intent: 'read');
+      expect(sent, ['show ip interface brief | include up\r']);
+      expect(result['asked_user'], isFalse);
       expect(asked, isEmpty);
     });
 
-    test('an alias stays with its device', () async {
-      await gateway.setAllowed('c1', true);
-      await gateway.setAllowed('c2', true);
-      await gateway.setAllowed('c1', false);
-      expect(gateway.aliasOf('c2'), 'DEVICE-02');
+    test('a change asks first; a no sends nothing, a yes sends it', () async {
+      final (tab, _, sent) = await open('c1');
+      answer = false;
+      await expectLater(gateway.sendCommand(tab, 'reload', intent: 'change'), throwsStateError);
+      expect(sent, isEmpty);
+      expect(asked.single.connectionName, 'CORE-SW');
+      expect(asked.single.reason, ChangeReason.agentSaysChange);
+
+      answer = true;
+      final result = await gateway.sendCommand(tab, 'reload', intent: 'change');
+      expect(sent, ['reload\r']);
+      expect(result['asked_user'], isTrue);
+    });
+
+    test('both sides must agree: a "read" the app does not know asks', () async {
+      final (tab, _, sent) = await open('c1');
+      await gateway.sendCommand(tab, 'write memory', intent: 'read');
+      expect(asked.single.reason, ChangeReason.unknown);
+      await gateway.sendCommand(tab, 'show run; reload', intent: 'read');
+      expect(asked.last.reason, ChangeReason.chained);
+      expect(sent, ['write memory\r', 'show run; reload\r'], reason: 'sent only after the yes');
+    });
+
+    test('at a configuration prompt every command asks', () async {
+      final (tab, c, _) = await open('c1');
+      c.debugReceiveOutput('CORE-SW(config-if)#');
+      await gateway.sendCommand(tab, 'show this', intent: 'read');
+      expect(asked.single.reason, ChangeReason.configMode);
+      expect(gateway.readScreen(tab)['config_mode'], isTrue);
+    });
+
+    test('"Ask before every command" asks for reads too', () async {
+      await gateway.setAskEveryCommand(true);
+      final (tab, _, _) = await open('c1');
+      await gateway.sendCommand(tab, 'show version', intent: 'read');
+      expect(asked, hasLength(1));
       final reloaded = AppMcpGateway(app);
       await reloaded.load();
-      expect(reloaded.aliasOf('c2'), 'DEVICE-02');
+      expect(reloaded.askEveryCommand, isTrue, reason: 'remembered');
+    });
+
+    test('with no way to ask, a change does not run; a read still does', () async {
+      final silent = AppMcpGateway(app);
+      await silent.load();
+      final tab = await silent.openConnection('c1');
+      final c = app.tabs.last.controller as PtySessionController;
+      final sent = <String>[];
+      c.writeOverride = sent.add;
+      await expectLater(silent.sendCommand(tab, 'reload', intent: 'change'), throwsStateError);
+      await silent.sendCommand(tab, 'show version', intent: 'read');
+      expect(sent, ['show version\r']);
+      silent.close();
+    });
+
+    test('a bad intent is refused before anything is asked', () async {
+      final (tab, _, sent) = await open('c1');
+      await expectLater(gateway.sendCommand(tab, 'show version', intent: 'maybe'), throwsArgumentError);
+      expect(sent, isEmpty);
+      expect(asked, isEmpty);
+    });
+
+    test('any open tab can be read, not only ones the agent opened', () async {
+      await app.openConnection(app.connections[1]);
+      final c = app.tabs.last.controller as PtySessionController;
+      c.debugReceiveOutput('EDGE-FW> ');
+      final sessions = gateway.listSessions();
+      expect(sessions.single['connection_id'], 'c2');
+      expect(sessions.single['kind'], 'ssh');
+      final screen = gateway.readScreen(sessions.single['tab_id'] as String);
+      expect(screen['text'], contains('EDGE-FW>'));
+      expect(screen['prompt'], endsWith('EDGE-FW>'), reason: 'the line the cursor is on');
+      expect(screen['config_mode'], isFalse);
     });
   });
 
@@ -302,16 +356,16 @@ void main() {
     app.connections = [SavedConnection(id: 'device-01', name: 'DEVICE-01', host: '192.0.2.1')];
     final gateway = AppMcpGateway(app);
     await gateway.load();
-    await gateway.setAllowed('device-01', true);
-    final sessionId = await gateway.openConnection('DEVICE-01');
+    final tab = await gateway.openConnection('device-01');
     final controller = app.tabs.last.controller as PtySessionController;
     addTearDown(() {
       gateway.close();
       controller.dispose();
       app.dispose();
     });
+    expect(gateway.readOutput(tab, 0)['output'], '', reason: 'capture starts on first use');
     controller.debugReceiveOutput('device prompt> ');
-    final output = gateway.readOutput(sessionId, 0);
+    final output = gateway.readOutput(tab, 0);
     expect(output['output'], 'device prompt> ');
     expect(output['cursor'], 15);
   });

@@ -33,4 +33,21 @@ void main() {
     expect(find.text('192.0.2.10'), findsOneWidget);
     expect(find.text('device-02.example.net'), findsOneWidget);
   });
+
+  testWidgets('the + offers a new connection and a new folder, nothing else', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final app = AppState();
+    await tester.pump();
+    app.connections.add(SavedConnection(name: 'DEVICE-01', host: '192.0.2.10'));
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+      value: app,
+      child: const MaterialApp(home: Scaffold(body: SizedBox(width: 300, child: ConnectionTree()))),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sidebar-new-connection')));
+    await tester.pumpAndSettle();
+    expect(find.text('New connection'), findsOneWidget);
+    expect(find.text('New folder'), findsOneWidget);
+    expect(find.text('Select all'), findsNothing);
+  });
 }

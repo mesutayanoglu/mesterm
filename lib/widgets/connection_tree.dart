@@ -17,7 +17,6 @@ import 'folder_picker.dart';
 import 'new_connection_dialog.dart';
 import 'threshold_draggable.dart';
 import 'tool_button.dart';
-import '../services/mcp_server.dart';
 import '../l10n/strings.dart';
 
 /// A row in the flattened, virtualized tree — a folder header, a connection
@@ -807,11 +806,8 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
                     showNewConnectionDialog(context);
                   } else if (key == 'folder') {
                     _promptName(context, 'New folder', '', (name) => app.addFolder(name));
-                  } else if (key == 'all') {
-                    _selectAll(app);
                   }
                 },
-                canSelectAll: app.connections.isNotEmpty,
               ),
             ],
           ),
@@ -1494,10 +1490,6 @@ class _ConnectionRow extends StatelessWidget {
       subtitle: conn.host,
       menuItems: [
         const MenuAction('connect', 'Connect', Icons.play_arrow_outlined),
-        if (_mcpGateway(context) case final gateway? when conn.protocol == ConnectionProtocol.ssh)
-          gateway.isAllowed(conn.id)
-              ? const MenuAction('mcp', 'Remove agent access', Icons.smart_toy_outlined)
-              : const MenuAction('mcp', 'Allow agent access', Icons.smart_toy_outlined),
         const MenuAction('edit', 'Edit…', Icons.tune, separatorBefore: true),
         const MenuAction('rename', 'Rename', Icons.edit_outlined),
         const MenuAction('clone', 'Clone', Icons.copy_outlined),
@@ -1507,9 +1499,6 @@ class _ConnectionRow extends StatelessWidget {
       onMenu: (key) async {
         if (key == 'connect') {
           await app.openConnection(conn);
-        } else if (key == 'mcp') {
-          final gateway = _mcpGateway(context);
-          if (gateway != null) await gateway.setAllowed(conn.id, !gateway.isAllowed(conn.id));
         } else if (key == 'edit') {
           await showEditConnectionDialog(context, conn);
         } else if (key == 'clone') {
@@ -1928,11 +1917,11 @@ class _TreeRowState extends State<_TreeRow> {
   }
 }
 
-/// The tree's one button: new connection, new folder, select all.
+/// The tree's one button: new connection or new folder. (Everything is
+/// selected with Ctrl+A.)
 class _AddButton extends StatelessWidget {
-  const _AddButton({required this.onPick, required this.canSelectAll});
+  const _AddButton({required this.onPick});
   final ValueChanged<String> onPick;
-  final bool canSelectAll;
 
   @override
   Widget build(BuildContext context) {
@@ -1955,8 +1944,6 @@ class _AddButton extends StatelessWidget {
               actions: [
                 const MenuAction('connection', 'New connection', Icons.add),
                 const MenuAction('folder', 'New folder', Icons.create_new_folder_outlined),
-                if (canSelectAll)
-                  const MenuAction('all', 'Select all', Icons.library_add_check_outlined, separatorBefore: true),
               ],
             );
             if (key != null) onPick(key);
@@ -2021,12 +2008,4 @@ class _OpenBadge extends StatelessWidget {
   }
 }
 
-/// A square tool button the height of the search field: a soft tile that
-/// lights up under the mouse.
 
-/// The agent gateway, while MCP access is on; null otherwise.
-AppMcpGateway? _mcpGateway(BuildContext context) {
-  final server = Provider.of<McpServer?>(context, listen: false);
-  final gateway = server?.gateway;
-  return server != null && server.enabled && gateway is AppMcpGateway ? gateway : null;
-}

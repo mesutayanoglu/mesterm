@@ -132,6 +132,14 @@ Do not "simplify" these without reading why.
     Ctrl+Shift, Ctrl+Tab or Ctrl+, so no key a session uses is taken. A
     terminal pane passes each key to `AppShortcuts.handle` before typing it;
     the home screen does the same for keys pressed elsewhere.
+- **MCP sees the whole app; commands are checked from both sides**
+  (`lib/services/mcp_server.dart`, `command_safety.dart`). The agent states
+  an intent with each command, and MesTerm classifies the command itself,
+  deny by default: only a known read-only command, called a read by the
+  agent, at a prompt that is not a configuration one, runs without the
+  user's yes. Never widen `_readOnly` with a command that can change
+  something with some argument; put it in `_guarded` with a check.
+  Usernames and passwords never go into a tool result.
 - **No bar while a session connects.** The terminal prints "Connecting to
   ..." itself; a bar that appeared and went away made the pane jump. The
   bar (`SessionStateBar`) is only for a session that failed or ended.

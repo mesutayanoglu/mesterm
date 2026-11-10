@@ -8,7 +8,6 @@ import '../providers/app_state.dart';
 import '../services/app_shortcuts.dart';
 import '../theme/app_theme.dart';
 import 'device_icon.dart';
-import 'status_bar.dart';
 
 /// Opens the command palette: one box to find a connection and open it, or
 /// run a command, from the keyboard. [run] carries out a command (the home
@@ -241,8 +240,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                                             child: Text(tr('open'), style: TextStyle(fontSize: 12, color: dim)),
                                           ),
                                         Text(conn.host, style: TextStyle(fontSize: 12, color: dim)),
-                                      ] else
-                                        KeyCap(AppShortcuts.label(e.command!)),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -250,23 +248,6 @@ class _CommandPaletteState extends State<CommandPalette> {
                             );
                           },
                         ),
-                ),
-                Container(
-                  height: 30,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.dividerColor))),
-                  child: DefaultTextStyle.merge(
-                    style: TextStyle(fontSize: 11.5, color: dim),
-                    child: Row(
-                      children: [
-                        Text(tr('↑ ↓ to choose')),
-                        const SizedBox(width: 16),
-                        Text(tr('Enter to open')),
-                        const SizedBox(width: 16),
-                        Text(tr('Esc to close')),
-                      ],
-                    ),
-                  ),
                 ),
               ],
             ),

@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../providers/app_state.dart';
-import '../services/app_shortcuts.dart';
 import '../services/mac_rdp_session.dart';
 import '../services/pty_session.dart';
 import '../services/rdp_session.dart';
@@ -22,11 +21,11 @@ Color sessionStatusColor(SessionStatus status) => switch (status) {
   SessionStatus.error || SessionStatus.closed => const Color(0xFFE5484D),
 };
 
-/// The bottom line of the window: the active session on the left (state,
-/// where it is connected, its size), the main shortcuts on the right.
+/// The bottom line of the window: the active session's state, where it is
+/// connected and how.
 ///
-/// It watches only the active tab: its state stream and, for a terminal, the
-/// terminal's resize. Session output does not rebuild it.
+/// It watches only the active tab's state stream; session output does not
+/// rebuild it.
 class StatusBar extends StatelessWidget {
   const StatusBar({super.key});
 
@@ -61,8 +60,6 @@ class StatusBar extends StatelessWidget {
                       )
                     : _SessionSummary(key: ObjectKey(controller), controller: controller),
               ),
-              // The hints give way first when the window is narrow.
-              if (constraints.maxWidth >= 640) _Hints(compact: constraints.maxWidth < 980),
             ],
           ),
         ),
@@ -90,24 +87,11 @@ class _SessionSummaryState extends State<_SessionSummary> {
   void initState() {
     super.initState();
     _status = widget.controller.statusStream.listen((_) => _changed());
-    final c = widget.controller;
-    if (c is TerminalSessionController) c.terminal.addListener(_onTerminal);
-  }
-
-  int _cols = 0;
-  int _rows = 0;
-
-  /// The terminal notifies on every write; only a new size is news here.
-  void _onTerminal() {
-    final t = (widget.controller as TerminalSessionController).terminal;
-    if (t.viewWidth != _cols || t.viewHeight != _rows) _changed();
   }
 
   @override
   void dispose() {
     _status?.cancel();
-    final c = widget.controller;
-    if (c is TerminalSessionController) c.terminal.removeListener(_onTerminal);
     super.dispose();
   }
 
@@ -141,12 +125,6 @@ class _SessionSummaryState extends State<_SessionSummary> {
     } else {
       target = c.host;
     }
-    if (c is TerminalSessionController) {
-      _cols = c.terminal.viewWidth;
-      _rows = c.terminal.viewHeight;
-      meta.add('$_cols×$_rows');
-      meta.add('UTF-8');
-    }
     return Row(
       children: [
         Container(
@@ -169,32 +147,6 @@ class _SessionSummaryState extends State<_SessionSummary> {
         Flexible(
           child: Text(meta.join(' · '), overflow: TextOverflow.ellipsis, style: TextStyle(color: dim)),
         ),
-      ],
-    );
-  }
-}
-
-class _Hints extends StatelessWidget {
-  const _Hints({required this.compact});
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final hints = [
-      (AppCommand.palette, tr('Search')),
-      (AppCommand.newConnection, tr('New')),
-      if (!compact) (AppCommand.nextTab, tr('Next tab')),
-      if (!compact) (AppCommand.splitView, tr('Split')),
-    ];
-    return Row(
-      key: const ValueKey('status-bar-hints'),
-      children: [
-        for (final (command, text) in hints) ...[
-          const SizedBox(width: 14),
-          KeyCap(AppShortcuts.label(command)),
-          const SizedBox(width: 5),
-          Text(text, style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkTextDim : AppColors.lightTextDim)),
-        ],
       ],
     );
   }

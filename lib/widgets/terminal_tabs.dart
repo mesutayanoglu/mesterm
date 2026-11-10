@@ -193,7 +193,6 @@ class _TabBarRow extends StatelessWidget {
             ),
           ),
           if (app.activeGroupId != null) _SeparateButton(groupId: app.activeGroupId!),
-          _SplitViewButton(active: app.activeGroupId != null, enabled: app.tabs.length > 1),
         ],
       ),
     );
@@ -353,6 +352,7 @@ Future<void> _showTabMenu(BuildContext context, AppState app, OpenTab tab, Offse
         ),
       if (saved != null)
         MenuAction('edit', 'Edit connection…', Icons.tune, separatorBefore: canReconnect(tab)),
+      if (app.tabs.length > 1) const MenuAction('split', 'Split view…', Icons.vertical_split_outlined, separatorBefore: true),
       const MenuAction('close', 'Close tab', Icons.close, separatorBefore: true),
     ],
   );
@@ -370,43 +370,14 @@ Future<void> _showTabMenu(BuildContext context, AppState app, OpenTab tab, Offse
       if (conn != null) app.linkTabToConnection(tab.id, conn);
     case 'edit':
       await showEditConnectionDialog(context, saved!);
+    case 'split':
+      await showSplitViewDialog(context);
     case 'close':
       final index = app.tabs.indexOf(tab);
       if (index >= 0) app.closeTab(index);
   }
 }
 
-/// Opens Split view. Highlighted while the tab area is split, so it is also
-/// where to look to undo one.
-class _SplitViewButton extends StatelessWidget {
-  const _SplitViewButton({required this.active, required this.enabled});
-  final bool active;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    // An icon at the strip's end, as the strip is otherwise only tabs; its
-    // name is in the tooltip, the palette and Ctrl+Shift+D.
-    return Padding(
-      padding: const EdgeInsets.only(right: 6, top: 4),
-      child: IconButton(
-        key: const ValueKey('split-view-button'),
-        tooltip: enabled ? tr('Split View') : tr('Open a second tab to split the view'),
-        onPressed: enabled ? () => showSplitViewDialog(context) : null,
-        iconSize: 16,
-        visualDensity: VisualDensity.compact,
-        style: IconButton.styleFrom(
-          backgroundColor: active ? theme.colorScheme.primary.withValues(alpha: 0.10) : null,
-          // Off until a second tab is open, but still to be seen: Material's
-          // disabled grey all but vanished on the light theme.
-          disabledForegroundColor: theme.textTheme.bodySmall?.color,
-        ),
-        icon: const Icon(Icons.vertical_split_outlined),
-      ),
-    );
-  }
-}
 
 /// What dragging a tab's chip carries.
 class _TabDrag {

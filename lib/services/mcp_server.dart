@@ -6,28 +6,40 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../app_version.dart';
-import '../models/models.dart';
-import '../providers/app_state.dart';
-import 'pty_session.dart';
+import 'package:xterm/xterm.dart';
 
-/// What the user is asked before a command reaches a device. The real
-/// connection name is shown only here, on this computer.
+import '../app_version.dart';
+import '../providers/app_state.dart';
+import '../widgets/device_icon.dart';
+import 'command_safety.dart';
+import 'pty_session.dart';
+import 'serial_session.dart';
+import 'session_controller.dart';
+
+export 'command_safety.dart' show ChangeReason;
+
+/// What the user is asked before a command the agent wants to run reaches
+/// a device, and why it is asked.
 class McpApproval {
-  const McpApproval({required this.connectionName, required this.alias, required this.command});
+  const McpApproval({required this.connectionName, required this.command, required this.reason});
   final String connectionName;
-  final String alias;
   final String command;
+  final ChangeReason reason;
 }
 
-/// Only saved SSH connections the user allowed one by one are exposed, under
-/// anonymous names (`DEVICE-01`...). Credentials, hosts and real names are
-/// never in the tool results, and every command waits for the user's yes.
+/// What a connected agent can do in MesTerm. It sees the whole app (saved
+/// connections, folders, open tabs, terminal output), opens connections and
+/// runs commands. A command runs without asking only when the agent calls it
+/// a read and MesTerm knows it as read-only ([checkAgentCommand]); anything
+/// else, and anything at a configuration prompt, waits for the user's yes.
+/// Usernames and passwords are never in a tool result.
 abstract class McpGateway {
-  List<Map<String, String>> listConnections();
+  List<Map<String, Object?>> listConnections();
+  List<Map<String, Object?>> listSessions();
   Future<String> openConnection(String connectionId);
-  Future<int> sendCommand(String sessionId, String command);
-  Map<String, Object?> readOutput(String sessionId, int cursor);
+  Future<Map<String, Object?>> sendCommand(String tabId, String command, {required String intent});
+  Map<String, Object?> readOutput(String tabId, int cursor);
+  Map<String, Object?> readScreen(String tabId, {int lines = 200});
   void close();
 }
 
@@ -39,101 +51,120 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   /// Asks the user about one command. No answer, or no way to ask, is a no.
   final Future<bool> Function(McpApproval approval)? approve;
 
-  final _sessions = <String, _CapturedSession>{};
+  /// Output captured per tab since the agent first used it.
+  final _captures = <String, _CapturedSession>{};
 
-  /// Allowed connection ids, each with the number of its anonymous name. The
-  /// number stays with a connection, so a name the agent saw keeps meaning
-  /// the same device.
-  final Map<String, int> _allowed = {};
-  static const _allowedKey = 'commands.mcp.allowed';
+  /// Ask about every command, reads included. Off by default.
+  bool askEveryCommand = false;
+  static const _askAllKey = 'commands.mcp.askEveryCommand';
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_allowedKey);
-    _allowed.clear();
-    if (raw != null) {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        decoded.forEach((k, v) {
-          if (k is String && v is int) _allowed[k] = v;
-        });
-      }
-    }
+    askEveryCommand = prefs.getBool(_askAllKey) ?? false;
     notifyListeners();
   }
 
-  bool isAllowed(String connectionId) => _allowed.containsKey(connectionId);
-
-  /// The anonymous name an allowed connection is shown to the agent under.
-  String? aliasOf(String connectionId) {
-    final n = _allowed[connectionId];
-    return n == null ? null : 'DEVICE-${n.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> setAllowed(String connectionId, bool allowed) async {
-    if (allowed) {
-      final next = _allowed.values.fold(0, max) + 1;
-      _allowed.putIfAbsent(connectionId, () => next);
-    } else {
-      _allowed.remove(connectionId);
-    }
+  Future<void> setAskEveryCommand(bool on) async {
+    askEveryCommand = on;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_allowedKey, jsonEncode(_allowed));
+    await prefs.setBool(_askAllKey, on);
   }
 
-  /// Allowed SSH connections that still exist, by anonymous name.
-  Iterable<SavedConnection> get allowedConnections => app.connections.where(
-    (c) => c.protocol == ConnectionProtocol.ssh && isAllowed(c.id),
-  );
-
-  SavedConnection _byAlias(String alias) {
-    for (final c in allowedConnections) {
-      if (aliasOf(c.id) == alias) return c;
+  String _folderPath(String? folderId) {
+    final names = <String>[];
+    final seen = <String>{};
+    var id = folderId;
+    while (id != null && seen.add(id)) {
+      final f = app.folders.where((f) => f.id == id).firstOrNull;
+      if (f == null) break;
+      names.insert(0, f.name);
+      id = f.parentId;
     }
-    throw ArgumentError('Connection not found, or not allowed for this agent.');
+    return names.join(' / ');
   }
 
   @override
-  List<Map<String, String>> listConnections() => [
-    for (final c in allowedConnections) {'id': aliasOf(c.id)!, 'name': aliasOf(c.id)!},
+  List<Map<String, Object?>> listConnections() => [
+    for (final c in app.connections)
+      {
+        'id': c.id,
+        'name': c.name,
+        'folder': _folderPath(c.folderId),
+        'protocol': c.protocol.name,
+        'host': c.host,
+        'port': c.port,
+        if (DeviceIcon.of(c) case final kind?) 'device': kind.name,
+        'open_tabs': [for (final t in app.tabs) if (t.connectionId == c.id) t.id],
+      },
   ];
 
   @override
+  List<Map<String, Object?>> listSessions() => [
+    for (var i = 0; i < app.tabs.length; i++)
+      {
+        'tab_id': app.tabs[i].id,
+        'title': app.tabs[i].controller.tabTitle ?? app.tabs[i].controller.host,
+        'connection_id': app.tabs[i].connectionId,
+        'kind': _kindOf(app.tabs[i].controller),
+        'status': app.tabs[i].controller.status.name,
+        'active': i == app.activeTabIndex,
+        'readable': app.tabs[i].controller is TerminalSessionController,
+      },
+  ];
+
+  static String _kindOf(SessionController c) => switch (c) {
+    PtySessionController() => 'ssh',
+    SerialSessionController() => 'serial',
+    _ => 'rdp',
+  };
+
+  @override
   Future<String> openConnection(String connectionId) async {
-    final connection = _byAlias(connectionId);
+    final connection = app.connections.where((c) => c.id == connectionId).firstOrNull;
+    if (connection == null) throw ArgumentError('Connection not found.');
     final before = app.tabs.length;
     final error = await app.openConnection(connection);
     if (error != null) throw StateError(error);
     if (app.tabs.length <= before) throw StateError('Session was not opened.');
-    final tab = app.tabs.last;
-    final controller = tab.controller;
-    if (controller is! PtySessionController) {
-      throw StateError('Not an SSH session.');
-    }
-    _sessions[tab.id] = _CapturedSession(controller, connection.id);
-    return tab.id;
+    return app.tabs.last.id;
   }
 
-  _CapturedSession _session(String id) {
-    final session = _sessions[id];
-    if (session == null ||
-        !app.tabs.any(
-          (t) => t.id == id && identical(t.controller, session.controller),
-        )) {
-      session?.close();
-      _sessions.remove(id);
-      throw ArgumentError('MCP session not found.');
+  OpenTab _tab(String tabId) {
+    final tab = app.tabs.where((t) => t.id == tabId).firstOrNull;
+    if (tab == null) {
+      _captures.remove(tabId)?.close();
+      throw ArgumentError('Tab not found.');
     }
-    // Access taken away after the session was opened ends it for the agent.
-    if (!isAllowed(session.connectionId)) {
-      throw StateError('This connection is no longer allowed for this agent.');
-    }
-    return session;
+    return tab;
+  }
+
+  TerminalSessionController _terminal(String tabId) {
+    final c = _tab(tabId).controller;
+    if (c is! TerminalSessionController) throw StateError('Not a terminal session (an RDP tab cannot be read).');
+    return c;
+  }
+
+  /// Output of a tab from the moment the agent first used it. A tab that
+  /// was reopened (another controller) starts a new capture.
+  _CapturedSession? _capture(String tabId) {
+    final c = _terminal(tabId);
+    if (c is! PtySessionController) return null;
+    final existing = _captures[tabId];
+    if (existing != null && identical(existing.controller, c)) return existing;
+    existing?.close();
+    return _captures[tabId] = _CapturedSession(c);
+  }
+
+  /// The line the cursor is on: the device's prompt, once it is waiting.
+  static String promptOf(Terminal terminal) {
+    final b = terminal.buffer;
+    final y = b.absoluteCursorY;
+    return y >= 0 && y < b.height ? b.lines[y].getText().trimRight() : '';
   }
 
   @override
-  Future<int> sendCommand(String sessionId, String command) async {
+  Future<Map<String, Object?>> sendCommand(String tabId, String command, {required String intent}) async {
     if (command.isEmpty ||
         command.length > 4096 ||
         command.contains('\r') ||
@@ -141,47 +172,77 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
         command.contains('\u0000')) {
       throw ArgumentError('Command must be one line of 1–4096 characters.');
     }
-    final session = _session(sessionId);
-    if (session.controller.status == SessionStatus.closed ||
-        session.controller.status == SessionStatus.error) {
+    if (intent != 'read' && intent != 'change') {
+      throw ArgumentError('intent must be "read" or "change".');
+    }
+    final c = _terminal(tabId);
+    if (c.status == SessionStatus.closed || c.status == SessionStatus.error) {
       throw StateError('Session is closed.');
     }
-    final connection = app.connections.firstWhere((c) => c.id == session.connectionId);
-    final ask = approve;
-    final yes = ask != null &&
-        await ask(McpApproval(
-          connectionName: connection.name,
-          alias: aliasOf(connection.id)!,
-          command: command,
-        ));
-    if (!yes) throw StateError('The user did not allow this command.');
-    // Checked again: the session may have closed while the user decided.
-    final current = _session(sessionId);
-    final cursor = current.end;
-    current.controller.sendInput('$command\r');
-    return cursor;
+    final capture = _capture(tabId);
+    var check = checkAgentCommand(command, intent: intent, prompt: promptOf(c.terminal));
+    if (check.readOnly && askEveryCommand) check = const CommandCheck.change(ChangeReason.unknown);
+    final asked = !check.readOnly;
+    if (asked) {
+      final tab = _tab(tabId);
+      final name = app.connections.where((x) => x.id == tab.connectionId).firstOrNull?.name ??
+          c.tabTitle ??
+          c.host;
+      final ask = approve;
+      final yes = ask != null &&
+          await ask(McpApproval(connectionName: name, command: command, reason: check.reason!));
+      if (!yes) throw StateError('The user did not allow this command.');
+      // Checked again: the tab may have closed while the user decided.
+      final again = _terminal(tabId);
+      if (!identical(again, c)) throw StateError('The session changed while the user decided.');
+    }
+    final cursor = capture?.end ?? 0;
+    c.terminal.onOutput?.call('$command\r');
+    return {'cursor': cursor, 'asked_user': asked};
   }
 
   @override
-  Map<String, Object?> readOutput(String sessionId, int cursor) =>
-      _session(sessionId).read(cursor);
+  Map<String, Object?> readOutput(String tabId, int cursor) {
+    final capture = _capture(tabId);
+    if (capture == null) throw StateError('Use read_screen for this tab.');
+    return capture.read(cursor);
+  }
+
+  @override
+  Map<String, Object?> readScreen(String tabId, {int lines = 200}) {
+    final c = _terminal(tabId);
+    final b = c.terminal.buffer;
+    final count = lines.clamp(1, 2000);
+    final end = b.height;
+    final start = (end - count).clamp(0, end);
+    final text = [for (var i = start; i < end; i++) b.lines[i].getText().trimRight()];
+    while (text.isNotEmpty && text.last.isEmpty) {
+      text.removeLast();
+    }
+    final prompt = promptOf(c.terminal);
+    return {
+      'text': text.join('\n'),
+      'prompt': prompt,
+      'config_mode': isConfigPrompt(prompt),
+      'status': c.status.name,
+    };
+  }
 
   @override
   void close() {
-    for (final session in _sessions.values) {
-      session.close();
+    for (final capture in _captures.values) {
+      capture.close();
     }
-    _sessions.clear();
+    _captures.clear();
   }
 }
 
 class _CapturedSession {
-  _CapturedSession(this.controller, this.connectionId) {
+  _CapturedSession(this.controller) {
     _subscription = controller.outputStream.listen(_append);
   }
 
   final PtySessionController controller;
-  final String connectionId;
   late final StreamSubscription<String> _subscription;
   String _output = '';
   int _start = 0;
@@ -369,7 +430,7 @@ class McpServer extends ChangeNotifier {
                 : '2025-11-25',
             'capabilities': {'tools': {}},
             'serverInfo': {'name': 'mesterm', 'version': appVersion},
-            'instructions': 'Use only the connections listed; they have anonymous names. The user approves every command in MesTerm before it runs, so a command can be refused. Open a session, send a single command, then read output using the returned cursor. Session output is asynchronous; poll read_output until the expected prompt or result appears. Never assume a command has finished just because one read returned no text.',
+            'instructions': 'MesTerm is an SSH, serial and RDP connection manager. You can see every saved connection (list_connections) and every open tab (list_sessions), open connections, read any terminal (read_screen, read_output) and run commands (send_command). Say with each command whether it only reads (intent "read") or changes something (intent "change"). A read MesTerm also knows as read-only (show, display, get, ping and the like) runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it, and can be refused. Output arrives asynchronously: poll read_output with the returned cursor until the prompt comes back. Usernames and passwords are never shared.',
           };
           break;
         case 'ping':
@@ -405,25 +466,28 @@ class McpServer extends ChangeNotifier {
         case 'list_connections':
           value = {'connections': gateway.listConnections()};
           break;
+        case 'list_sessions':
+          value = {'sessions': gateway.listSessions()};
+          break;
         case 'open_connection':
-          value = {
-            'tab_id': await gateway.openConnection(
-              _string(args, 'connection_id'),
-            ),
-          };
+          value = {'tab_id': await gateway.openConnection(_string(args, 'connection_id'))};
           break;
         case 'send_command':
-          value = {
-            'cursor': await gateway.sendCommand(
-              _string(args, 'tab_id'),
-              _string(args, 'command'),
-            ),
-          };
+          value = await gateway.sendCommand(
+            _string(args, 'tab_id'),
+            _string(args, 'command'),
+            intent: _string(args, 'intent'),
+          );
           break;
         case 'read_output':
           final cursor = args['cursor'] ?? 0;
           if (cursor is! int) throw ArgumentError('cursor must be an integer.');
           value = gateway.readOutput(_string(args, 'tab_id'), cursor);
+          break;
+        case 'read_screen':
+          final lines = args['lines'] ?? 200;
+          if (lines is! int) throw ArgumentError('lines must be an integer.');
+          value = gateway.readScreen(_string(args, 'tab_id'), lines: lines);
           break;
         default:
           throw ArgumentError('Unknown tool.');
@@ -468,12 +532,17 @@ class McpServer extends ChangeNotifier {
   static const _tools = [
     {
       'name': 'list_connections',
-      'description': 'List the SSH connections the user allowed for this agent, by anonymous ID. No real names, hostnames or credentials are returned.',
+      'description': 'Every saved connection: id, name, folder path, protocol, host, port, device kind, and the tabs it is open in. Usernames and passwords are not included.',
+      'inputSchema': {'type': 'object', 'properties': <String, Object>{}},
+    },
+    {
+      'name': 'list_sessions',
+      'description': 'Every open tab: tab_id, title, connection_id, kind (ssh, serial, rdp), status, whether it is the active tab, and whether its terminal can be read.',
       'inputSchema': {'type': 'object', 'properties': <String, Object>{}},
     },
     {
       'name': 'open_connection',
-      'description': 'Open a saved SSH connection in a MesTerm tab and return its tab_id.',
+      'description': 'Open a saved connection in a new MesTerm tab and return its tab_id.',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -484,24 +553,40 @@ class McpServer extends ChangeNotifier {
     },
     {
       'name': 'send_command',
-      'description': 'Send one line followed by Enter to an MCP-opened SSH session. The user is asked to allow each command first; a refusal is returned as an error. Returns the output cursor from before the send. Commands execute on the remote device with the saved connection privileges.',
+      'description': 'Type one line followed by Enter into a terminal tab (SSH or serial). intent says what the command does: "read" for one that only shows something, "change" for anything that changes the device or the host. A read that MesTerm also recognises as read-only runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it, and a refusal is returned as an error. Returns the output cursor from before the command and whether the user was asked.',
       'inputSchema': {
         'type': 'object',
         'properties': {
           'tab_id': {'type': 'string'},
           'command': {'type': 'string'},
+          'intent': {
+            'type': 'string',
+            'enum': ['read', 'change'],
+          },
         },
-        'required': ['tab_id', 'command'],
+        'required': ['tab_id', 'command', 'intent'],
       },
     },
     {
       'name': 'read_output',
-      'description': 'Read up to 8192 characters of terminal output from cursor. Use the returned cursor for the next read; output can arrive later.',
+      'description': 'Read up to 8192 characters of an SSH tab\'s output from cursor (capture starts when the tab is first used through MCP). Use the returned cursor for the next read; output can arrive later.',
       'inputSchema': {
         'type': 'object',
         'properties': {
           'tab_id': {'type': 'string'},
           'cursor': {'type': 'integer', 'minimum': 0},
+        },
+        'required': ['tab_id'],
+      },
+    },
+    {
+      'name': 'read_screen',
+      'description': 'The text of a terminal tab as it is on screen, with scrollback: the last lines (default 200, at most 2000), the prompt the cursor is on, and whether that prompt is a configuration prompt.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'tab_id': {'type': 'string'},
+          'lines': {'type': 'integer', 'minimum': 1, 'maximum': 2000},
         },
         'required': ['tab_id'],
       },
