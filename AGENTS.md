@@ -42,7 +42,6 @@ flutter test integration_test/<file> -d windows   # real-window tests, Windows o
 | `lib/services/mac_rdp_session.dart` | macOS RDP: launches FreeRDP or Microsoft's client. |
 | `lib/services/storage_service.dart`, `rdm_import.dart` | Persistence, import/export (JSON, XML, CSV). |
 | `lib/services/password_vault.dart` | AES-GCM for remembered passwords; the key lives in DPAPI (Windows) or the Keychain (macOS). |
-| `lib/services/feedback_service.dart` | Anonymous feedback to a Google Form. |
 | `lib/services/update_service.dart` | In-app updater (GitHub releases, SHA256 check). |
 | `lib/widgets/connection_tree.dart` | The left-hand tree: selection, double click, drag and drop, folder order, selection bar. |
 | `lib/widgets/terminal_tabs.dart` | Tabs, split panes, the terminal view. |
