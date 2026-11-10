@@ -57,6 +57,27 @@ void main() {
       expect(asked, isEmpty);
     });
 
+    test('a release still being built is skipped; the one before it is offered', () async {
+      SharedPreferences.setMockInitialValues({});
+      tags = ['v99.0.1', 'v99.0.0'];
+      // v99.0.1 is tagged, its build is still running: the API does not
+      // show it (not found), or shows a draft.
+      UpdateService.fetchRelease = (tag) async {
+        asked.add(tag);
+        if (tag == 'v99.0.1') return null;
+        return {'tag_name': tag, 'draft': false, 'assets': const []};
+      };
+      final check = await UpdateService.checkNow();
+      expect(check.failed, isFalse, reason: 'not "GitHub could not be reached"');
+      expect(check.info?.version, 'v99.0.0');
+      expect(asked, ['v99.0.1', 'v99.0.0']);
+
+      UpdateService.fetchRelease = (tag) async => {'tag_name': tag, 'draft': true, 'assets': const []};
+      final drafts = await UpdateService.checkNow();
+      expect(drafts.failed, isFalse);
+      expect(drafts.info, isNull, reason: 'nothing published yet is up to date');
+    });
+
     test('a feed that cannot be read is a failed check, not an update', () async {
       UpdateService.fetchTags = () async => null;
       expect((await UpdateService.checkNow()).failed, isTrue);

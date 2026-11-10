@@ -60,34 +60,40 @@ class UpdateService {
       final betas = await _chosenChannel() == ReleaseChannel.beta;
       final tags = await fetchTags();
       if (tags == null) return const UpdateCheck.failed();
-      String? newest;
-      for (final tag in tags) {
-        final stable = _stableTag.hasMatch(tag);
-        if (!stable && !(betas && _betaTag.hasMatch(tag))) continue;
-        if (newest == null || compareVersions(tag, newest) > 0) newest = tag;
-      }
+      // Every version newer than this one, newest first.
+      final newer = <String>{
+        for (final tag in tags)
+          if ((_stableTag.hasMatch(tag) || (betas && _betaTag.hasMatch(tag))) && compareVersions(tag, appVersion) > 0)
+            tag,
+      }.toList()..sort((a, b) => compareVersions(b, a));
       // Never an older one, a beta behind the version installed included.
-      if (newest == null || compareVersions(newest, appVersion) <= 0) return const UpdateCheck.upToDate();
+      if (newer.isEmpty) return const UpdateCheck.upToDate();
 
-      final release = await fetchRelease(newest);
-      if (release == null) return const UpdateCheck.failed();
-      if (release['draft'] == true) return const UpdateCheck.upToDate();
-      final channel = _betaTag.hasMatch(newest) ? ReleaseChannel.beta : ReleaseChannel.stable;
-      final assets = (release['assets'] as List?) ?? const [];
-      final plan = await _plan(assets, newest, channel);
+      // The newest that is published. A release is tagged before it is built,
+      // so for some minutes the newest tag has no release the API will show
+      // (a draft, or not found): that one is skipped, not reported as GitHub
+      // being unreachable, and the one before it is offered instead.
+      for (final newest in newer) {
+        final release = await fetchRelease(newest);
+        if (release == null || release['draft'] == true) continue;
+        final channel = _betaTag.hasMatch(newest) ? ReleaseChannel.beta : ReleaseChannel.stable;
+        final assets = (release['assets'] as List?) ?? const [];
+        final plan = await _plan(assets, newest, channel);
 
-      return UpdateCheck.available(UpdateInfo(
-        version: newest,
-        channel: channel,
-        releaseUrl: release['html_url'] as String? ??
-            'https://github.com/$_owner/$_repo/releases/tag/$newest',
-        notes: (release['body'] as String? ?? '').trim(),
-        assetName: plan?.asset.name,
-        assetUrl: plan?.asset.url,
-        assetSize: plan?.asset.size ?? 0,
-        checksumsUrl: _findAssetUrl(assets, _checksumsAsset),
-        method: plan?.method,
-      ));
+        return UpdateCheck.available(UpdateInfo(
+          version: newest,
+          channel: channel,
+          releaseUrl: release['html_url'] as String? ??
+              'https://github.com/$_owner/$_repo/releases/tag/$newest',
+          notes: (release['body'] as String? ?? '').trim(),
+          assetName: plan?.asset.name,
+          assetUrl: plan?.asset.url,
+          assetSize: plan?.asset.size ?? 0,
+          checksumsUrl: _findAssetUrl(assets, _checksumsAsset),
+          method: plan?.method,
+        ));
+      }
+      return const UpdateCheck.upToDate();
     } catch (_) {
       return const UpdateCheck.failed();
     }
