@@ -381,4 +381,5 @@ const turkish = <String, String>{
   'Every other key, plain Ctrl ones included, goes to the session, as in PuTTY.': 'Düz Ctrl tuşları dahil diğer tüm tuşlar, PuTTY\'deki gibi oturuma gider.',
   'Open settings': 'Ayarları aç',
   'Quick connect': 'Hızlı bağlan',
+  'Filter': 'Filtrele',
 };

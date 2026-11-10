@@ -386,20 +386,20 @@ class _SplitViewButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Tooltip(
-      message: enabled ? tr('Split View') : tr('Open a second tab to split the view'),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: TextButton.icon(
-          onPressed: enabled ? () => showSplitViewDialog(context) : null,
-          style: TextButton.styleFrom(
-            backgroundColor: active ? theme.colorScheme.primary.withValues(alpha: 0.10) : null,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            visualDensity: VisualDensity.compact,
-          ),
-          icon: const Icon(Icons.vertical_split_outlined, size: 16),
-          label: Text(tr('Split View'), style: const TextStyle(fontSize: 12)),
+    // An icon at the strip's end, as the strip is otherwise only tabs; its
+    // name is in the tooltip, the palette and Ctrl+Shift+D.
+    return Padding(
+      padding: const EdgeInsets.only(right: 6, top: 4),
+      child: IconButton(
+        key: const ValueKey('split-view-button'),
+        tooltip: enabled ? tr('Split View') : tr('Open a second tab to split the view'),
+        onPressed: enabled ? () => showSplitViewDialog(context) : null,
+        iconSize: 16,
+        visualDensity: VisualDensity.compact,
+        style: IconButton.styleFrom(
+          backgroundColor: active ? theme.colorScheme.primary.withValues(alpha: 0.10) : null,
         ),
+        icon: const Icon(Icons.vertical_split_outlined),
       ),
     );
   }

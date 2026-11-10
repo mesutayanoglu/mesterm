@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../app_version.dart';
+import '../theme/app_theme.dart';
 import '../providers/app_state.dart';
 import '../services/serial_session.dart';
 import 'context_menu.dart';
@@ -117,19 +117,14 @@ class _QuickConnectBarState extends State<QuickConnectBar> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  appVersion,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.4),
-                  ),
-                ),
               ],
             ),
           ),
           Row(
             children: [
+              // The protocol first, then what to reach with it.
+              _ProtocolPicker(value: _protocol, onChanged: _setProtocol),
+              const SizedBox(width: 6),
               Expanded(
                 child: SizedBox(
                   height: 28,
@@ -176,8 +171,6 @@ class _QuickConnectBarState extends State<QuickConnectBar> {
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              _ProtocolPicker(value: _protocol, onChanged: _setProtocol),
             ],
           ),
         ],
@@ -219,7 +212,7 @@ class _ProtocolPickerState extends State<_ProtocolPicker> {
     return Tooltip(
       message: tr('Quick connect protocol'),
       child: Material(
-        color: theme.inputDecorationTheme.fillColor,
+        color: theme.brightness == Brightness.dark ? AppColors.darkPanelAlt : AppColors.lightPanelAlt,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(6),
           side: BorderSide(color: theme.dividerColor),
@@ -233,12 +226,7 @@ class _ProtocolPickerState extends State<_ProtocolPicker> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(widget.value.icon, size: 13),
-                const SizedBox(width: 5),
-                Text(
-                  tr(widget.value.label),
-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
-                ),
+                Text(tr(widget.value.label), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                 const SizedBox(width: 2),
                 const Icon(Icons.expand_more, size: 16),
               ],

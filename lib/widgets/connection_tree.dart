@@ -733,12 +733,12 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 10, 8, 6),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
           child: Row(
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 30,
+                  height: 28,
                   child: Focus(
                     // Down goes from the box into the list; Escape empties
                     // the box and hands the keys back to the tree.
@@ -766,16 +766,28 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
                       onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
                       style: const TextStyle(fontSize: 12),
                       decoration: InputDecoration(
-                        hintText: tr('Filter connections'),
-                        // Says how to get here from the keyboard.
-                        suffixText: _query.isEmpty && !_searchFocus.hasFocus ? '/' : null,
-                        suffixStyle: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
+                        hintText: tr('Filter'),
                         hintStyle: const TextStyle(fontSize: 12),
                         prefixIcon: const Icon(Icons.search, size: 14),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                        // Empty: the key that gets here, as a hint (an icon
+                        // slot, since suffixText shows only with focus).
+                        suffixIconConstraints: _query.isEmpty ? const BoxConstraints(minWidth: 0, minHeight: 0) : null,
                         suffixIcon: _query.isEmpty
-                            ? null
+                            ? Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: Text(
+                                  '/',
+                                  key: const ValueKey('filter-slash-hint'),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: 'Consolas',
+                                    fontFamilyFallback: const ['Menlo', 'monospace'],
+                                    color: Theme.of(context).textTheme.bodySmall?.color,
+                                  ),
+                                ),
+                              )
                             : IconButton(
                                 icon: const Icon(Icons.close, size: 13),
                                 onPressed: () => setState(() {
@@ -806,7 +818,7 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
         ),
         // The list's heading, with how many connections there are.
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
           child: Row(
             children: [
               Expanded(
@@ -1852,9 +1864,9 @@ class _TreeRowState extends State<_TreeRow> {
                                       widget.title,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: isFolder ? 12.5 : 13,
+                                        fontSize: isFolder ? 12 : 13,
                                         height: 1.1,
-                                        color: isFolder ? (isDark ? const Color(0xFFC8C8C8) : const Color(0xFF3A3A3A)) : text,
+                                        color: isFolder ? (isDark ? const Color(0xFFB5B5B5) : const Color(0xFF3D3D3D)) : text,
                                         fontWeight: isFolder ? FontWeight.w600 : (widget.bold ? FontWeight.w500 : FontWeight.w400),
                                         letterSpacing: isFolder ? 0.2 : 0,
                                       ),
@@ -1948,8 +1960,8 @@ class _AddButton extends StatelessWidget {
             if (key != null) onPick(key);
           },
           child: SizedBox(
-            width: 30,
-            height: 30,
+            width: 28,
+            height: 28,
             child: Icon(Icons.add, size: 16, color: dark ? AppColors.darkBg : AppColors.lightBg),
           ),
         ),

@@ -136,7 +136,8 @@ void main() {
 
     // One tab for the split, a small one per session in it (so a session can
     // be dragged back out), and one for the new session.
-    expect(find.text('Split View'), findsNWidgets(2), reason: 'the split tab and the Split View button');
+    expect(find.text('Split View'), findsOneWidget, reason: 'the split tab; the Split View button is an icon');
+    expect(find.byKey(const ValueKey('split-view-button')), findsOneWidget);
     expect(find.text('192.0.2.71'), findsOneWidget);
     expect(find.text('192.0.2.74'), findsOneWidget);
     expect(app.activeGroupId, isNull);

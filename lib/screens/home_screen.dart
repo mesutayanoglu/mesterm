@@ -87,11 +87,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   SizedBox(
                     width: width,
-                    child: Column(
-                      children: [
-                        const Expanded(child: ConnectionTree()),
-                        const QuickConnectBar(),
-                      ],
+                    // The sidebar is a panel a step lighter than the window,
+                    // as the terminal side is a step darker.
+                    child: ColoredBox(
+                      color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkPanel : AppColors.lightPanel,
+                      child: const Column(
+                        children: [
+                          Expanded(child: ConnectionTree()),
+                          QuickConnectBar(),
+                        ],
+                      ),
                     ),
                   ),
                   const _SidebarResizer(),
@@ -121,7 +126,7 @@ class _PaletteButton extends StatelessWidget {
     final dark = theme.brightness == Brightness.dark;
     final dim = theme.textTheme.bodySmall?.color;
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 440, minWidth: 160),
+      constraints: const BoxConstraints(maxWidth: 440, minWidth: 160, maxHeight: 26),
       child: Material(
         color: dark ? AppColors.darkPanel : AppColors.lightPanelAlt,
         shape: RoundedRectangleBorder(

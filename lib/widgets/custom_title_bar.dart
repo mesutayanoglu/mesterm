@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 import '../app_version.dart';
 import '../l10n/strings.dart';
 
-const double kTitleBarHeight = 36;
+const double kTitleBarHeight = 38;
 
 /// Replaces the native Windows caption (which just shows the OS accent
 /// color — orange, in this case — behind plain system buttons) with one
@@ -101,7 +101,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
             Text(
               widget.title ?? appName,
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.2,
                 color: isDark ? AppColors.darkText : AppColors.lightText,
