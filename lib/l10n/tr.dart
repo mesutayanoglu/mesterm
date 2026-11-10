@@ -332,4 +332,20 @@ const turkish = <String, String>{
   'No password is saved for this connection, so you will need to type it.':
       'Bu bağlantıda kayıtlı parola yok, parolayı sizin yazmanız gerekecek.',
   'Remind me later': 'Daha sonra hatırlat',
+  // ---- Status bar and command palette ----
+  'No open sessions': 'Açık oturum yok',
+  'Search': 'Ara',
+  'New': 'Yeni',
+  'Next tab': 'Sonraki sekme',
+  'Previous tab': 'Önceki sekme',
+  'Split': 'Böl',
+  'New connection': 'Yeni bağlantı',
+  'Search connections and commands': 'Bağlantı ya da komut ara',
+  'Nothing matches.': 'Eşleşen bir şey yok.',
+  'open': 'açık',
+  '↑ ↓ to choose': '↑ ↓ seç',
+  'Enter to open': 'Enter aç',
+  'Esc to close': 'Esc kapat',
+  'Connecting to {target}': '{target} adresine bağlanılıyor',
+  'Could not connect to {target}': '{target} adresine bağlanılamadı',
 };

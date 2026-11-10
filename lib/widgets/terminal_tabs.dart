@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
 
 import '../providers/app_state.dart';
+import '../services/app_shortcuts.dart';
 import '../services/mac_rdp_session.dart';
 import '../services/pane_layout.dart';
 import '../services/pty_session.dart';
@@ -1104,9 +1105,16 @@ class _TerminalPaneState extends State<_TerminalPane> {
       child: TerminalViewport(style: style, background: app.terminalBackground, child: _view(app, style)),
     );
     final session = widget.controller;
-    if (session is! PtySessionController) return terminal;
+    final state = SessionStateBar(controller: session, onReconnect: () {
+      session.reconnect();
+      _focusNode.requestFocus();
+    });
+    if (session is! PtySessionController) {
+      return Column(children: [state, Expanded(child: terminal)]);
+    }
     return Column(
       children: [
+        state,
         ValueListenableBuilder<String?>(
           valueListenable: session.loginQuestion,
           builder: (context, question, _) => question == null
@@ -1181,7 +1189,13 @@ class _TerminalPaneState extends State<_TerminalPane> {
       // PuTTY's keys: Ctrl+A/V/C go to the session, Shift+Insert pastes,
       // Ctrl+Insert copies (TerminalClipboard).
       shortcuts: TerminalClipboard.shortcuts,
-      onKeyEvent: _clipboard.handleKey,
+      // The window's own shortcuts first (all Ctrl+Shift or Ctrl+Tab, so no
+      // key the session uses), then PuTTY's clipboard keys.
+      onKeyEvent: (node, event) {
+        final shortcut = AppShortcuts.handle(event);
+        if (shortcut == KeyEventResult.handled) return shortcut;
+        return _clipboard.handleKey(node, event);
+      },
       // PuTTY: right-click pastes, selecting copies (TerminalClipboard).
       onSecondaryTapDown: (_, _) {
         _clipboard.paste();
@@ -1192,6 +1206,128 @@ class _TerminalPaneState extends State<_TerminalPane> {
         background: app.terminalBackground,
         foreground: app.terminalForeground,
       ),
+    );
+  }
+}
+
+/// A thin bar over a terminal while its session connects, and after it
+/// failed or ended: what happened, with Reconnect and Close tab, so the next
+/// step is a click away instead of in the tab's right-click menu. The
+/// terminal's own text stays in view under it.
+class SessionStateBar extends StatelessWidget {
+  const SessionStateBar({super.key, required this.controller, required this.onReconnect});
+  final TerminalSessionController controller;
+  final VoidCallback onReconnect;
+
+  void _closeTab(BuildContext context) {
+    final app = context.read<AppState>();
+    final i = app.tabs.indexWhere((t) => t.controller == controller);
+    if (i != -1) app.closeTab(i);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<SessionStatus>(
+      stream: controller.statusStream,
+      initialData: controller.status,
+      builder: (context, _) {
+        final status = controller.status;
+        if (status == SessionStatus.running) return const SizedBox.shrink();
+        final theme = Theme.of(context);
+        final dark = theme.brightness == Brightness.dark;
+        final dim = theme.textTheme.bodySmall?.color;
+        final c = controller;
+        final target = c is PtySessionController
+            ? '${c.host}:${c.port}'
+            : c is SerialSessionController
+            ? '${c.port}, ${c.baud} baud'
+            : c.host;
+        if (status == SessionStatus.starting) {
+          // Only while the server is being reached: once OpenSSH runs, the
+          // terminal itself shows what happens (a login prompt, a question).
+          if (c is! PtySessionController) return const SizedBox.shrink();
+          return ValueListenableBuilder<bool>(
+            valueListenable: c.reaching,
+            builder: (context, reaching, _) => !reaching
+                ? const SizedBox.shrink()
+                : Container(
+            key: const ValueKey('session-connecting'),
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            color: theme.colorScheme.surface,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 1.6, color: theme.colorScheme.primary),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    tr('Connecting to {target}', {'target': target}),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _closeTab(context),
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                  child: Text(tr('Cancel'), style: const TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+          );
+        }
+        final failed = status == SessionStatus.error;
+        final detail = c is PtySessionController ? c.lastError : null;
+        final red = dark ? const Color(0xFFFF8A8E) : const Color(0xFFC62828);
+        return Container(
+          key: const ValueKey('session-ended'),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: failed
+                ? (dark ? const Color(0xFF2A1416) : const Color(0xFFFDECEC))
+                : theme.colorScheme.surface,
+            border: Border(bottom: BorderSide(color: theme.dividerColor)),
+          ),
+          child: Row(
+            children: [
+              Icon(failed ? Icons.error_outline : Icons.link_off, size: 16, color: failed ? red : dim),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      failed ? tr('Could not connect to {target}', {'target': target}) : tr('Session ended'),
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: failed ? red : null),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (detail != null && detail.isNotEmpty && failed)
+                      Text(detail, style: TextStyle(fontSize: 12, color: dim), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                key: const ValueKey('session-reconnect'),
+                onPressed: onReconnect,
+                style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                child: Text(tr('Reconnect'), style: const TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(width: 6),
+              TextButton(
+                onPressed: () => _closeTab(context),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                child: Text(tr('Close tab'), style: const TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

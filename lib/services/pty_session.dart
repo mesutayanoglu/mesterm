@@ -69,6 +69,13 @@ class PtySessionController implements TerminalSessionController {
   String _username;
   final String _password;
 
+  /// True while the server's SSH port is being reached, before anything is
+  /// asked or typed: the "connecting" moment the tab shows a bar for.
+  final reaching = ValueNotifier<bool>(false);
+
+  /// The user the session logs in as; empty until known.
+  String get username => _username;
+
   @override
   late final Terminal terminal;
   Pty? _pty;
@@ -320,7 +327,13 @@ class PtySessionController implements TerminalSessionController {
         // Reach the server first, as PuTTY does before it asks anything: an
         // address with nothing behind it used to get a "login as:" prompt and
         // a green tab, as if connected.
-        final problem = checkReachability ? await _reach() : null;
+        reaching.value = checkReachability;
+        final String? problem;
+        try {
+          problem = checkReachability ? await _reach() : null;
+        } finally {
+          if (generation == _generation) reaching.value = false;
+        }
         if (generation != _generation) return;
         if (problem != null) {
           _fail(problem);
@@ -835,6 +848,10 @@ class PtySessionController implements TerminalSessionController {
 
   @override
   void dispose() {
+    // A reach still under way finds a newer generation and leaves
+    // [reaching] alone.
+    _generation++;
+    reaching.dispose();
     loginQuestion.dispose();
     sftpOpen.dispose();
     _lineInput = null;

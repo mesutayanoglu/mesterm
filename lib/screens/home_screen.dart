@@ -2,47 +2,108 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_state.dart';
+import '../services/app_shortcuts.dart';
 
+import '../widgets/command_palette.dart';
 import '../widgets/connection_tree.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/new_connection_dialog.dart';
 import '../widgets/quick_connect_bar.dart';
+import '../widgets/split_view_dialog.dart';
+import '../widgets/status_bar.dart';
 import '../widgets/terminal_tabs.dart';
 import '../widgets/update_dialog.dart';
 import 'settings_screen.dart';
 import '../l10n/strings.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    AppShortcuts.dispatcher = _run;
+  }
+
+  @override
+  void dispose() {
+    if (AppShortcuts.dispatcher == _run) AppShortcuts.dispatcher = null;
+    super.dispose();
+  }
+
+  /// Carries out a window shortcut or a palette command.
+  void _run(AppCommand command) {
+    if (!mounted) return;
+    // Nothing runs behind an open dialog: a shortcut typed in one would
+    // otherwise open a second dialog under it or switch tabs out of sight.
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    final app = context.read<AppState>();
+    switch (command) {
+      case AppCommand.palette:
+        showCommandPalette(context, run: _run);
+      case AppCommand.newConnection:
+        showNewConnectionDialog(context);
+      case AppCommand.nextTab:
+        app.cycleTab(1);
+      case AppCommand.previousTab:
+        app.cycleTab(-1);
+      case AppCommand.closeTab:
+        if (app.activeTabIndex >= 0 && app.activeTabIndex < app.tabs.length) app.closeTab(app.activeTabIndex);
+      case AppCommand.splitView:
+        if (app.tabs.length >= 2) showSplitViewDialog(context);
+      case AppCommand.settings:
+        showSettings(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final width = context.select<AppState, double>((a) => a.sidebarWidth);
-    return Scaffold(
-      body: Column(
-        children: [
-          const CustomTitleBar(),
-          Expanded(
-            child: Row(
-              children: [
-                SizedBox(
-                  width: width,
-                  child: Column(
-                    children: [
-                      Container(
-                        height: 32,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        decoration: BoxDecoration(
-                          border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
-                        ),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              height: 26,
-                              child: width < 230
-                                  ? Tooltip(
-                                      message: tr('New Connection'),
-                                      child: ElevatedButton(
+    // Keys pressed outside a terminal (in the tree, the filter box, on a
+    // button) come here; a terminal pane passes them on itself.
+    return Focus(
+      onKeyEvent: (_, event) => AppShortcuts.handle(event),
+      child: Scaffold(
+        body: Column(
+          children: [
+            CustomTitleBar(actions: [_PaletteButton(onTap: () => _run(AppCommand.palette))]),
+            Expanded(
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: Column(
+                      children: [
+                        Container(
+                          height: 32,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: BoxDecoration(
+                            border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                height: 26,
+                                child: width < 230
+                                    ? Tooltip(
+                                        message: tr('New Connection'),
+                                        child: ElevatedButton(
+                                          key: const Key('sidebar-new-connection'),
+                                          style: ElevatedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            minimumSize: const Size(0, 26),
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          onPressed: () => showNewConnectionDialog(context),
+                                          child: const Icon(Icons.add, size: 15),
+                                        ),
+                                      )
+                                    : ElevatedButton.icon(
                                         key: const Key('sidebar-new-connection'),
                                         style: ElevatedButton.styleFrom(
                                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -50,49 +111,80 @@ class HomeScreen extends StatelessWidget {
                                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                         ),
                                         onPressed: () => showNewConnectionDialog(context),
-                                        child: const Icon(Icons.add, size: 15),
+                                        icon: const Icon(Icons.add, size: 15),
+                                        label: Text(tr('New Connection'), style: const TextStyle(fontSize: 12)),
                                       ),
-                                    )
-                                  : ElevatedButton.icon(
-                                      key: const Key('sidebar-new-connection'),
-                                      style: ElevatedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        minimumSize: const Size(0, 26),
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      onPressed: () => showNewConnectionDialog(context),
-                                      icon: const Icon(Icons.add, size: 15),
-                                      label: Text(tr('New Connection'), style: const TextStyle(fontSize: 12)),
-                                    ),
-                            ),
-                            const Spacer(),
-                            // Only appears once a newer release has been found.
-                            const UpdateButton(compact: true),
-                            const SizedBox(width: 8),
-                            // Theme, terminal colours, import/export and
-                            // updates all live on the Settings page now,
-                            // instead of four unlabelled icons here.
-                            _HeaderIcon(
-                              icon: Icons.settings_outlined,
-                              tooltip: tr('Settings'),
-                              onTap: () => showSettings(context),
-                            ),
-                          ],
+                              ),
+                              const Spacer(),
+                              // Only appears once a newer release has been found.
+                              const UpdateButton(compact: true),
+                              const SizedBox(width: 8),
+                              // Theme, terminal colours, import/export and
+                              // updates all live on the Settings page now,
+                              // instead of four unlabelled icons here.
+                              _HeaderIcon(
+                                icon: Icons.settings_outlined,
+                                tooltip: tr('Settings'),
+                                onTap: () => showSettings(context),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const Expanded(child: ConnectionTree()),
-                      const QuickConnectBar(),
-                    ],
+                        const Expanded(child: ConnectionTree()),
+                        const QuickConnectBar(),
+                      ],
+                    ),
                   ),
-                ),
-                const _SidebarResizer(),
-                // Sessions take whatever the panel leaves: terminals re-wrap
-                // and RDP sessions resize to the new pane.
-                const Expanded(child: TerminalTabsArea()),
+                  const _SidebarResizer(),
+                  // Sessions take whatever the panel leaves: terminals re-wrap
+                  // and RDP sessions resize to the new pane.
+                  const Expanded(child: TerminalTabsArea()),
+                ],
+              ),
+            ),
+            const StatusBar(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Opens the command palette from the title bar, and says how to open it
+/// from the keyboard.
+class _PaletteButton extends StatelessWidget {
+  const _PaletteButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dim = theme.textTheme.bodySmall?.color;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Material(
+        color: theme.colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: BorderSide(color: theme.dividerColor),
+        ),
+        child: InkWell(
+          key: const ValueKey('title-bar-search'),
+          borderRadius: BorderRadius.circular(6),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                Icon(Icons.search, size: 14, color: dim),
+                const SizedBox(width: 6),
+                Text(tr('Search'), style: TextStyle(fontSize: 12, color: dim)),
+                const SizedBox(width: 10),
+                KeyCap(AppShortcuts.label(AppCommand.palette)),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
