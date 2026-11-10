@@ -88,13 +88,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Appearance'), findsWidgets);
     expect(find.text('English'), findsOneWidget);
 
     await tester.tap(find.text('Türkçe'));
     await tester.pumpAndSettle();
     // Including the const section headers a plain rebuild would skip.
-    expect(find.text('Görünüm'), findsOneWidget);
+    expect(find.text('Görünüm'), findsWidgets);
     expect(find.text('Güncellemeleri denetle'), findsOneWidget);
     expect(find.text('Appearance'), findsNothing);
     final prefs = await SharedPreferences.getInstance();
@@ -108,7 +108,7 @@ void main() {
 
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
-    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Appearance'), findsWidgets);
   });
 
   testWidgets('sidebar in Turkish', (tester) async {

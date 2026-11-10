@@ -117,6 +117,19 @@ App Store, so the sandbox costs everything and buys nothing here. Upgrading
 from 1.0.23 or earlier moves saved connections out of the old container
 automatically, once, on first launch.
 
+## Keyboard
+
+| Keys | Does |
+|---|---|
+| Ctrl+Shift+P | Command palette: find and open a connection, or run a command |
+| Ctrl+Shift+T | New connection |
+| Ctrl+Tab, Ctrl+Shift+Tab | Next and previous tab |
+| Ctrl+Shift+W | Close the tab |
+| Ctrl+Shift+D | Split view |
+| Ctrl+, | Settings |
+
+Every other key, plain Ctrl ones included, goes to the session, as in PuTTY.
+
 ## Releases
 
 Every push to `main` is a release. `.github/workflows/release.yml` runs the

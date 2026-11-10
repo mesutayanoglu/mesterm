@@ -124,6 +124,14 @@ Do not "simplify" these without reading why.
   - Copy and paste are Ctrl+Insert and Shift+Insert, select-to-copy, and
     right-click paste.
   - Selecting with the mouse past the edge auto-scrolls.
+  - The window's own shortcuts (`lib/services/app_shortcuts.dart`) are all
+    Ctrl+Shift, Ctrl+Tab or Ctrl+, so no key a session uses is taken. A
+    terminal pane passes each key to `AppShortcuts.handle` before typing it;
+    the home screen does the same for keys pressed elsewhere.
+- **The "connecting" bar shows only while the SSH port is being reached**
+  (`PtySessionController.reaching`). After that the terminal itself shows
+  what happens: a `login as:` prompt or a question must not sit under a
+  "connecting" bar.
 
 ## Translations
 

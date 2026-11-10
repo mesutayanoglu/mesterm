@@ -26,13 +26,58 @@ Future<void> showSettings(BuildContext context) {
 /// the window can still be moved and closed while it is open, and opening it
 /// suspends any embedded RDP session the same way a dialog does (the session
 /// is a window of its own, drawn above the app, and would otherwise cover it).
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _keys = <String, GlobalKey>{};
+  String? _current;
+
+  GlobalKey _key(String section) => _keys.putIfAbsent(section, GlobalKey.new);
+
+  void _goTo(String section) {
+    setState(() => _current = section);
+    final ctx = _keys[section]?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 200), curve: Curves.easeOutCubic);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final divider = Theme.of(context).dividerColor;
     final hasMcpServer = context.watch<McpServer?>() != null;
+    final sections = ['Appearance', 'Connections', if (hasMcpServer) 'MCP integration', 'Updates'];
+    final current = _current ?? sections.first;
+    Widget section(String title, List<Widget> children) =>
+        KeyedSubtree(key: _key(title), child: _Section(title: title, children: children));
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        section('Appearance', const [
+          _Label('Theme'),
+          _ThemePicker(),
+          SizedBox(height: 28),
+          _Label('SSH terminal'),
+          _TerminalAppearance(),
+          SizedBox(height: 28),
+          _Label('Language'),
+          _LanguagePicker(),
+        ]),
+        const SizedBox(height: 22),
+        section('Connections', const [_ImportExport()]),
+        const SizedBox(height: 22),
+        if (hasMcpServer) ...[
+          section('MCP integration', const [_McpPanel()]),
+          const SizedBox(height: 22),
+        ],
+        section('Updates', const [_UpdatesPanel()]),
+      ],
+    );
     return Scaffold(
       body: Column(
         children: [
@@ -56,41 +101,78 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Section(
-                        title: 'Appearance',
-                        children: [
-                          _Label('Theme'),
-                          _ThemePicker(),
-                          SizedBox(height: 28),
-                          _Label('SSH terminal'),
-                          _TerminalAppearance(),
-                          SizedBox(height: 28),
-                          _Label('Language'),
-                          _LanguagePicker(),
-                        ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // The section list needs room beside the page; on a narrow
+                // window the page scrolls on its own.
+                final wide = constraints.maxWidth >= 1040;
+                final page = SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                  child: Center(
+                    child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 760), child: content),
+                  ),
+                );
+                if (!wide) return page;
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SectionNav(sections: sections, current: current, onTap: _goTo),
+                    Expanded(child: page),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The page's sections, down the left: a click scrolls to one.
+class _SectionNav extends StatelessWidget {
+  const _SectionNav({required this.sections, required this.current, required this.onTap});
+  final List<String> sections;
+  final String current;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final dim = theme.textTheme.bodySmall?.color;
+    return Container(
+      key: const ValueKey('settings-nav'),
+      width: 200,
+      padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final s in sections)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Material(
+                color: s == current
+                    ? (dark ? Colors.white : Colors.black).withValues(alpha: dark ? 0.10 : 0.06)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () => onTap(s),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Text(
+                      tr(s),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: s == current ? FontWeight.w600 : FontWeight.w400,
+                        color: s == current ? null : dim,
                       ),
-                      SizedBox(height: 22),
-                      _Section(title: 'Connections', children: [_ImportExport()]),
-                      SizedBox(height: 22),
-                      if (hasMcpServer) ...[
-                        const _Section(title: 'MCP integration', children: [_McpPanel()]),
-                        const SizedBox(height: 22),
-                      ],
-                      _Section(title: 'Updates', children: [_UpdatesPanel()]),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -411,24 +493,33 @@ class _ThemeCard extends StatelessWidget {
 // Terminal colours
 // ---------------------------------------------------------------------------
 
-const _bgPresets = [
-  Color(0xFF14161A), // MesTerm default
-  Color(0xFF000000), // pure black
-  Color(0xFF0C0C0C), // Windows Terminal black
-  Color(0xFF1E1E1E), // VS Code dark
-  Color(0xFF002B36), // Solarized dark
-  Color(0xFFFDF6E3), // Solarized light
-  Color(0xFFFFFFFF), // white
+/// Ready-made pairs of terminal colours, shown as small terminals.
+class _Scheme {
+  const _Scheme(this.name, this.background, this.foreground);
+  final String name;
+  final Color background;
+  final Color foreground;
+}
+
+const _schemes = [
+  _Scheme('MesTerm', Color(0xFF14161A), Color(0xFFE8E6E1)),
+  _Scheme('Black', Color(0xFF000000), Color(0xFFFFFFFF)),
+  _Scheme('Graphite', Color(0xFF1E1E1E), Color(0xFFD4D4D4)),
+  _Scheme('Solarized Dark', Color(0xFF002B36), Color(0xFF839496)),
+  _Scheme('Solarized Light', Color(0xFFFDF6E3), Color(0xFF586E75)),
+  _Scheme('Paper', Color(0xFFFFFFFF), Color(0xFF1A1A1A)),
+  _Scheme('Green phosphor', Color(0xFF0A0F0A), Color(0xFF33FF66)),
+  _Scheme('Amber', Color(0xFF120D05), Color(0xFFFFB000)),
 ];
 
-const _fgPresets = [
-  Color(0xFFE8E6E1), // MesTerm default
-  Color(0xFFFFFFFF), // white
-  Color(0xFF00FF00), // classic green phosphor
-  Color(0xFFC9973A), // amber
-  Color(0xFF839496), // Solarized body
-  Color(0xFF000000), // black (for light backgrounds)
-];
+/// WCAG contrast ratio of two opaque colours, 1 to 21.
+double contrastRatio(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final hi = la > lb ? la : lb;
+  final lo = la > lb ? lb : la;
+  return (hi + 0.05) / (lo + 0.05);
+}
 
 class _TerminalAppearance extends StatefulWidget {
   const _TerminalAppearance();
@@ -438,10 +529,7 @@ class _TerminalAppearance extends StatefulWidget {
 }
 
 class _TerminalAppearanceState extends State<_TerminalAppearance> {
-  static const _other = '\u0000other';
   List<String> _fonts = [defaultTerminalFont];
-  bool _typingFont = false;
-  final _fontName = TextEditingController();
 
   @override
   void initState() {
@@ -452,22 +540,12 @@ class _TerminalAppearanceState extends State<_TerminalAppearance> {
   }
 
   @override
-  void dispose() {
-    _fontName.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final bg = app.terminalBackground;
     final fg = app.terminalForeground;
     final family = app.terminalFontFamily ?? defaultTerminalFont;
     final size = app.terminalFontSize;
-    final dim = Theme.of(context).textTheme.bodySmall?.color;
-    // A font typed in by name that is not in the detected list still shows
-    // as the current choice.
-    final options = [..._fonts, if (!_fonts.contains(family)) family];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -475,6 +553,7 @@ class _TerminalAppearanceState extends State<_TerminalAppearance> {
         // A real terminal's worth of text in the chosen font, size and
         // colours, so the choice is judged on what a session will look like.
         Container(
+          key: const ValueKey('terminal-preview'),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: bg,
@@ -496,135 +575,458 @@ class _TerminalAppearanceState extends State<_TerminalAppearance> {
             ),
           ),
         ),
-        const SizedBox(height: 18),
-        Wrap(
-          spacing: 24,
-          runSpacing: 14,
-          crossAxisAlignment: WrapCrossAlignment.end,
-          children: [
-            SizedBox(
-              width: 280,
-              child: DropdownButtonFormField<String>(
-                initialValue: _typingFont ? _other : family,
-                isExpanded: true,
-                borderRadius: BorderRadius.circular(6),
-                decoration: InputDecoration(labelText: tr('Font'), isDense: true),
-                items: [
-                  for (final f in options)
-                    DropdownMenuItem(
-                      value: f,
-                      child: Text(
-                        f == defaultTerminalFont ? tr('{font} (default)', {'font': f}) : f,
-                        style: TextStyle(fontFamily: f, fontFamilyFallback: const ['Consolas', 'Menlo']),
-                      ),
-                    ),
-                  DropdownMenuItem(value: _other, child: Text(tr('Other font by name…'))),
-                ],
-                onChanged: (v) {
-                  if (v == _other) {
-                    setState(() {
-                      _typingFont = true;
-                      _fontName.text = '';
-                    });
-                  } else if (v != null) {
-                    setState(() => _typingFont = false);
-                    app.setTerminalFont(
-                      family: v == defaultTerminalFont ? null : v,
-                      resetFamily: v == defaultTerminalFont,
-                    );
-                  }
-                },
-              ),
+        const SizedBox(height: 20),
+        _SettingRow(
+          label: 'Font',
+          child: _FontField(
+            family: family,
+            fonts: _fonts,
+            onPick: (f) => app.setTerminalFont(
+              family: f == defaultTerminalFont ? null : f,
+              resetFamily: f == defaultTerminalFont,
             ),
-            SizedBox(
-              width: 280,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(tr('Size: {n} pt', {'n': size.round()}), style: TextStyle(fontSize: 12, color: dim)),
-                  Slider(
-                    value: size.clamp(9, 24),
-                    min: 9,
-                    max: 24,
-                    divisions: 15,
-                    label: '${size.round()} pt',
-                    onChanged: (v) => app.setTerminalFont(size: v),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
-        if (_typingFont) ...[
-          const SizedBox(height: 12),
-          Row(
+        _SettingRow(
+          label: 'Size',
+          child: _SizeStepper(
+            value: size.round(),
+            min: 9,
+            max: 24,
+            onChanged: (v) => app.setTerminalFont(size: v.toDouble()),
+          ),
+        ),
+        _SettingRow(
+          label: 'Color scheme',
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: [
-              SizedBox(
-                width: 280,
-                child: TextField(
-                  controller: _fontName,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: tr('Font name, as installed (e.g. JetBrains Mono)'),
-                    isDense: true,
-                  ),
-                  onSubmitted: (v) {
-                    if (v.trim().isEmpty) return;
-                    app.setTerminalFont(family: v);
-                    setState(() => _typingFont = false);
-                  },
+              for (final s in _schemes)
+                _SchemeCard(
+                  scheme: s,
+                  selected: s.background.toARGB32() == bg.toARGB32() && s.foreground.toARGB32() == fg.toARGB32(),
+                  onTap: () => app.setTerminalColors(background: s.background, foreground: s.foreground),
                 ),
-              ),
-              const SizedBox(width: 10),
-              OutlinedButton(
-                onPressed: () {
-                  if (_fontName.text.trim().isEmpty) return;
-                  app.setTerminalFont(family: _fontName.text);
-                  setState(() => _typingFont = false);
-                },
-                child: Text(tr('Use')),
-              ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            tr(
-              'A font that is not installed falls back to the default, so a typo shows straight away in the preview.',
-            ),
-            style: TextStyle(fontSize: 11, color: dim),
-          ),
-        ],
-        const SizedBox(height: 22),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _SwatchGroup(
-                title: 'Background',
-                colors: _bgPresets,
-                selected: bg,
-                onPick: (c) => app.setTerminalColors(background: c),
-              ),
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: _SwatchGroup(
-                title: 'Text',
-                colors: _fgPresets,
-                selected: fg,
-                onPick: (c) => app.setTerminalColors(foreground: c),
-              ),
-            ),
-          ],
         ),
+        _SettingRow(
+          label: 'Background',
+          child: _ColorCodeField(color: bg, onChanged: (c) => app.setTerminalColors(background: c)),
+        ),
+        _SettingRow(
+          label: 'Text',
+          child: _ColorCodeField(color: fg, onChanged: (c) => app.setTerminalColors(foreground: c)),
+        ),
+        _SettingRow(label: 'Readability', last: true, child: _ContrastNote(background: bg, foreground: fg)),
       ],
     );
   }
 }
 
-/// A colour typed as a code -- `#1E1E1E`, `#FFF`, `rgb(30, 30, 30)` or
-/// `30,30,30` -- for colours the swatches do not have. Applied as soon as it
-/// parses; shows what it expects while it does not.
+/// One setting: its name on the left, the control on the right, rows ruled
+/// off from each other. On a narrow page the name goes above.
+class _SettingRow extends StatelessWidget {
+  const _SettingRow({required this.label, required this.child, this.last = false});
+  final String label;
+  final Widget child;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final name = Text(tr(label), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500));
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: last ? null : Border(bottom: BorderSide(color: theme.dividerColor)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, c) => c.maxWidth < 520
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [name, const SizedBox(height: 8), child],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 150, child: Padding(padding: const EdgeInsets.only(top: 8), child: name)),
+                  Expanded(child: Align(alignment: Alignment.centerLeft, child: child)),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+/// A colour scheme drawn as a tiny terminal in its own colours.
+class _SchemeCard extends StatelessWidget {
+  const _SchemeCard({required this.scheme, required this.selected, required this.onTap});
+  final _Scheme scheme;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    return Tooltip(
+      message: tr(scheme.name),
+      waitDuration: const Duration(milliseconds: 500),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: tr(scheme.name),
+        child: InkWell(
+          key: ValueKey('scheme-${scheme.name}'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: 112,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: selected ? accent : theme.dividerColor, width: selected ? 2 : 1),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  height: 46,
+                  padding: const EdgeInsets.fromLTRB(8, 7, 8, 0),
+                  decoration: BoxDecoration(color: scheme.background, borderRadius: BorderRadius.circular(5)),
+                  child: Text(
+                    '\$ ls -la\nup  up',
+                    style: TextStyle(
+                      color: scheme.foreground,
+                      fontFamily: defaultTerminalFont,
+                      fontFamilyFallback: const ['Consolas', 'Menlo', 'Courier New'],
+                      fontSize: 11,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 6, 4, 3),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          tr(scheme.name),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, fontWeight: selected ? FontWeight.w600 : FontWeight.w400),
+                        ),
+                      ),
+                      if (selected) Icon(Icons.check, size: 14, color: accent),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// How readable the text is on the background, from the contrast ratio.
+class _ContrastNote extends StatelessWidget {
+  const _ContrastNote({required this.background, required this.foreground});
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = contrastRatio(background, foreground);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final (String verdict, Color color) = ratio >= 7
+        ? ('Very readable', dark ? const Color(0xFF6BD68F) : const Color(0xFF1E7A3D))
+        : ratio >= 4.5
+        ? ('Readable', dark ? const Color(0xFF6BD68F) : const Color(0xFF1E7A3D))
+        : ('Hard to read', dark ? const Color(0xFFFF8A8E) : const Color(0xFFC62828));
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Text(
+            tr('Contrast {ratio}:1', {'ratio': ratio.toStringAsFixed(1)}),
+            key: const ValueKey('contrast-ratio'),
+            style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]),
+          ),
+          const SizedBox(width: 10),
+          Text(tr(verdict), style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+}
+
+/// The font size as a number with a step down and a step up.
+class _SizeStepper extends StatelessWidget {
+  const _SizeStepper({required this.value, required this.min, required this.max, required this.onChanged});
+  final int value;
+  final int min;
+  final int max;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    Widget step(IconData icon, String tip, int to, Key key) => SizedBox(
+      width: 34,
+      height: 34,
+      child: IconButton(
+        key: key,
+        tooltip: tr(tip),
+        padding: EdgeInsets.zero,
+        iconSize: 16,
+        onPressed: to < min || to > max ? null : () => onChanged(to),
+        icon: Icon(icon),
+      ),
+    );
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(kControlRadius),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          step(Icons.remove, 'Smaller', value - 1, const ValueKey('font-size-down')),
+          Container(
+            width: 64,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border.symmetric(vertical: BorderSide(color: theme.dividerColor)),
+            ),
+            child: Text(
+              tr('{n} pt', {'n': value}),
+              key: const ValueKey('font-size'),
+              style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]),
+            ),
+          ),
+          step(Icons.add, 'Larger', value + 1, const ValueKey('font-size-up')),
+        ],
+      ),
+    );
+  }
+}
+
+/// The terminal font: a field showing the current one in its own face, which
+/// opens a searchable list of the installed fixed-width fonts.
+class _FontField extends StatelessWidget {
+  const _FontField({required this.family, required this.fonts, required this.onPick});
+  final String family;
+  final List<String> fonts;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 320,
+      child: Material(
+        color: theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(kControlRadius),
+          side: BorderSide(color: theme.dividerColor),
+        ),
+        child: InkWell(
+          key: const ValueKey('font-field'),
+          borderRadius: BorderRadius.circular(kControlRadius),
+          onTap: () async {
+            final picked = await showDialog<String>(
+              context: context,
+              builder: (_) => _FontPickerDialog(fonts: fonts, current: family),
+            );
+            if (picked != null) onPick(picked);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    family == defaultTerminalFont ? tr('{font} (default)', {'font': family}) : family,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: family,
+                      fontFamilyFallback: const ['Consolas', 'Menlo'],
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                Icon(Icons.unfold_more, size: 16, color: theme.textTheme.bodySmall?.color),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FontPickerDialog extends StatefulWidget {
+  const _FontPickerDialog({required this.fonts, required this.current});
+  final List<String> fonts;
+  final String current;
+
+  @override
+  State<_FontPickerDialog> createState() => _FontPickerDialogState();
+}
+
+class _FontPickerDialogState extends State<_FontPickerDialog> {
+  final _query = TextEditingController();
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dim = theme.textTheme.bodySmall?.color;
+    final q = _query.text.trim();
+    final shown = widget.fonts.where((f) => f.toLowerCase().contains(q.toLowerCase())).toList();
+    // A font typed by name that is not in the list (not detected, or not
+    // fixed-width) can still be used.
+    final typed = q.isNotEmpty && !widget.fonts.any((f) => f.toLowerCase() == q.toLowerCase());
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: SizedBox(
+        key: const ValueKey('font-picker'),
+        width: 480,
+        height: 460,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+              child: Text(tr('Terminal font'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: TextField(
+                key: const ValueKey('font-search'),
+                controller: _query,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (v) {
+                  if (shown.length == 1) {
+                    Navigator.of(context).pop(shown.single);
+                  } else if (typed) {
+                    Navigator.of(context).pop(v.trim());
+                  }
+                },
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: tr('Search installed fonts, or type a font name'),
+                  prefixIcon: const Icon(Icons.search, size: 16),
+                  prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                children: [
+                  if (typed)
+                    _FontRow(
+                      name: q,
+                      label: tr('Use "{font}"', {'font': q}),
+                      selected: false,
+                      onTap: () => Navigator.of(context).pop(q),
+                    ),
+                  for (final f in shown)
+                    _FontRow(
+                      name: f,
+                      label: f == defaultTerminalFont ? tr('{font} (default)', {'font': f}) : f,
+                      selected: f == widget.current,
+                      onTap: () => Navigator.of(context).pop(f),
+                    ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(18, 8, 12, 10),
+              decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.dividerColor))),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      tr('A font that is not installed falls back to the default.'),
+                      style: TextStyle(fontSize: 12, color: dim),
+                    ),
+                  ),
+                  TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(tr('Cancel'))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A font in the list: its name, and a sample in the font itself.
+class _FontRow extends StatelessWidget {
+  const _FontRow({required this.name, required this.label, required this.selected, required this.onTap});
+  final String name;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return Material(
+      color: selected ? (dark ? Colors.white : Colors.black).withValues(alpha: dark ? 0.10 : 0.06) : Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 3),
+                    Text(
+                      'admin@sw1# show run  0O 1lI {}',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: name,
+                        fontFamilyFallback: const ['Consolas', 'Menlo'],
+                        fontSize: 13,
+                        color: theme.textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected) Icon(Icons.check, size: 16, color: theme.colorScheme.primary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A colour: its swatch, its code (`#1E1E1E`, `#FFF`, `rgb(30, 30, 30)` or
+/// `30,30,30`, applied as soon as it parses) and the full palette.
 class _ColorCodeField extends StatefulWidget {
   const _ColorCodeField({required this.color, required this.onChanged});
   final Color color;
@@ -642,7 +1044,8 @@ class _ColorCodeFieldState extends State<_ColorCodeField> {
   @override
   void didUpdateWidget(_ColorCodeField old) {
     super.didUpdateWidget(old);
-    // A swatch was clicked: show its code, unless the user is mid-typing.
+    // A scheme or the palette changed it: show its code, unless the user is
+    // mid-typing.
     if (old.color != widget.color && !_focus.hasFocus) {
       _text.text = colorToHex(widget.color);
       _invalid = false;
@@ -662,149 +1065,58 @@ class _ColorCodeFieldState extends State<_ColorCodeField> {
     if (c != null) widget.onChanged(c);
   }
 
+  Future<void> _palette() async {
+    final c = await showColorPicker(context, initial: widget.color, title: 'Pick a color');
+    if (c != null) widget.onChanged(c);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      child: TextField(
-        controller: _text,
-        focusNode: _focus,
-        onChanged: _apply,
-        onSubmitted: _apply,
-        style: const TextStyle(fontSize: 13),
-        decoration: InputDecoration(
-          isDense: true,
-          labelText: tr('Color code'),
-          hintText: tr('#1E1E1E or rgb(30, 30, 30)'),
-          errorText: _invalid ? tr('Use #RRGGBB, #RGB or rgb(r, g, b)') : null,
-          // The colour itself: click it for the palette.
-          prefixIcon: Tooltip(
-            message: tr('Pick a color'),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () async {
-                final c = await showColorPicker(context, initial: widget.color, title: 'Pick a color');
-                if (c != null) widget.onChanged(c);
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: widget.color,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black26),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-        ),
-      ),
-    );
-  }
-}
-
-class _SwatchGroup extends StatelessWidget {
-  const _SwatchGroup({
-    required this.title,
-    required this.colors,
-    required this.selected,
-    required this.onPick,
-  });
-
-  final String title;
-  final List<Color> colors;
-  final Color selected;
-  final ValueChanged<Color> onPick;
-
-  /// The last swatch: opens the palette for any colour, not only these.
-  Widget _paletteButton(BuildContext context) {
     final theme = Theme.of(context);
-    return Tooltip(
-      message: tr('Pick a color'),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: () async {
-            final c = await showColorPicker(context, initial: selected, title: 'Pick a color');
-            if (c != null) onPick(c);
-          },
-          child: Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const SweepGradient(
-                colors: [
-                  Color(0xFFFF0000),
-                  Color(0xFFFFFF00),
-                  Color(0xFF00FF00),
-                  Color(0xFF00FFFF),
-                  Color(0xFF0000FF),
-                  Color(0xFFFF00FF),
-                  Color(0xFFFF0000),
-                ],
-              ),
-              border: Border.all(color: theme.dividerColor),
-            ),
-            child: Center(
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(color: theme.colorScheme.surface, shape: BoxShape.circle),
-                child: Icon(Icons.colorize, size: 12, color: theme.textTheme.bodyMedium?.color),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _swatch(Color c, Color accent) {
-    final on = selected.toARGB32() == c.toARGB32();
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () => onPick(c),
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: c,
-            shape: BoxShape.circle,
-            border: Border.all(color: on ? accent : Colors.black26, width: on ? 3 : 1),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
-    final custom = !colors.any((c) => c.toARGB32() == selected.toARGB32());
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(tr(title), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final c in colors) _swatch(c, accent),
-            // A colour entered by code shows as its own selected swatch, so
-            // it is clear which colour is in use.
-            if (custom) _swatch(selected, accent),
-            _paletteButton(context),
-          ],
+        Tooltip(
+          message: tr('Pick a color'),
+          child: InkWell(
+            onTap: _palette,
+            borderRadius: BorderRadius.circular(kControlRadius),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: widget.color,
+                borderRadius: BorderRadius.circular(kControlRadius),
+                border: Border.all(color: theme.dividerColor),
+              ),
+            ),
+          ),
         ),
-        const SizedBox(height: 14),
-        _ColorCodeField(color: selected, onChanged: onPick),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 200,
+          child: TextField(
+            controller: _text,
+            focusNode: _focus,
+            onChanged: _apply,
+            onSubmitted: _apply,
+            style: TextStyle(fontSize: 13, fontFamily: defaultTerminalFont, fontFamilyFallback: const ['Consolas', 'Menlo']),
+            decoration: InputDecoration(
+              isDense: true,
+              labelText: tr('Color code'),
+              hintText: tr('#1E1E1E or rgb(30, 30, 30)'),
+              errorText: _invalid ? tr('Use #RRGGBB, #RGB or rgb(r, g, b)') : null,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          tooltip: tr('Pick a color'),
+          onPressed: _palette,
+          iconSize: 16,
+          icon: const Icon(Icons.colorize),
+        ),
       ],
     );
   }

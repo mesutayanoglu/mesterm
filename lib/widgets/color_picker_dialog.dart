@@ -83,13 +83,34 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: c,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Theme.of(context).dividerColor),
+              // New over old: the colour being picked against the one it
+              // replaces. A click on the old half goes back to it.
+              Tooltip(
+                message: tr('Back to the current color'),
+                child: Container(
+                  key: const ValueKey('color-compare'),
+                  width: 44,
+                  height: 44,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                  ),
+                  child: Column(
+                    children: [
+                      Expanded(child: Container(color: c)),
+                      Expanded(
+                        child: GestureDetector(
+                          key: const ValueKey('color-revert'),
+                          onTap: () => _setHsv(HSVColor.fromColor(widget.initial.withAlpha(255))),
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: Container(color: widget.initial.withAlpha(255)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 12),

@@ -54,7 +54,11 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Settings'), findsOneWidget);
-        expect(find.text('Appearance'), findsOneWidget);
+        // The section list is there when the window has room for it, and
+        // names the sections again.
+        final wide = size.width >= 1040;
+        expect(find.byKey(const ValueKey('settings-nav')), wide ? findsOneWidget : findsNothing);
+        expect(find.text('Appearance'), findsNWidgets(wide ? 2 : 1));
         expect(find.text('Light'), findsOneWidget);
         expect(find.text('Dark'), findsOneWidget);
         expect(find.text('SSH terminal'), findsOneWidget);
