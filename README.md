@@ -100,6 +100,8 @@ whether it only reads (`intent: "read"`) or changes something
 - **Settings > MCP integration > Ask before every command** makes reads ask
   too.
 
+At initialize MesTerm gives the agent short working rules (`McpServer.serverInstructions`): filter `list_connections`; run 1-2 commands directly; for 3 or more, plan and interpret while one subagent (Haiku, where the client supports it) runs read-only commands one by one and returns their raw output; configuration changes only by the main model, after the user approves them.
+
 The tools:
 
 - `list_connections`: filters `folder`, `query` (name or host), `protocol`,

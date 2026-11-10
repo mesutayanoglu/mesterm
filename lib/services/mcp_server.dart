@@ -809,7 +809,7 @@ class McpServer extends ChangeNotifier {
                 : '2025-11-25',
             'capabilities': {'tools': {}},
             'serverInfo': {'name': 'mesterm', 'version': appVersion},
-            'instructions': 'MesTerm is an SSH, serial and RDP connection manager. list_connections finds saved connections (filter with folder, query, protocol, device; it returns at most limit, with total), list_sessions shows open tabs, open_connection opens one. send_command types a command and, by default, waits for the prompt and returns the command\'s own output, cleaned of escape codes and pager prompts, so no separate read_screen or read_output call is needed for it. Paging is turned off automatically on Aruba, Cisco, Palo Alto and Huawei. Say with each command whether it only reads (intent "read") or changes something (intent "change"). A read MesTerm also knows as read-only (show, display, get, ping and the like) runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it, and can be refused. Long output is cut (max_chars; keep head, tail or both, default both) and says what was skipped (skipped_from, skipped_to); read_output with offset returns that part without running the command again. Usernames and passwords are never shared.',
+            'instructions': serverInstructions,
           };
           break;
         case 'ping':
@@ -948,6 +948,23 @@ class McpServer extends ChangeNotifier {
     response.add(bytes);
     unawaited(response.close());
   }
+
+  /// What the connected model is told at initialize: how to work with
+  /// MesTerm, for any model. Short, as it is read on every connection.
+  static const serverInstructions = """MesTerm manages SSH, serial and RDP connections to network devices and servers.
+
+Rules:
+1. Always call list_connections with a query or folder filter.
+2. A task of 1-2 commands on a device: run them yourself with send_command.
+3. A task of 3 or more commands: you plan and interpret the results. If your client supports subagents, hand the command loop to a single subagent running the Haiku model. The subagent:
+   - runs read-only commands only (intent "read");
+   - sends them one at a time with send_command;
+   - returns each command's full raw output, untrimmed and without commentary;
+   - if an output is truncated, also reads the skipped part with read_output (offset = skipped_from, length = skipped_to - skipped_from);
+   - stops and reports at anything unexpected (an error, a refusal, a timeout, an unexpected prompt).
+4. Configuration changes (intent "change") are made only by you, never by a subagent, and only after showing the exact commands to the user and getting their approval.
+
+How it works: send_command waits for the prompt and returns the command's own output, cleaned; no separate read is needed. Commands MesTerm knows as read-only run at once; anything else, and anything at a configuration prompt, asks the user in MesTerm and can be refused. Long output is cut (max_chars, keep) and says what it skipped. Usernames and passwords are never shared.""";
 
   static const _tools = [
     {

@@ -121,6 +121,23 @@ void main() {
     });
     expect(initStatus, 200);
     expect(init!['result']['protocolVersion'], '2025-11-25');
+    final instructions = init['result']['instructions'] as String;
+    expect(instructions, McpServer.serverInstructions);
+    for (final rule in [
+      'query or folder filter',
+      '1-2 commands',
+      '3 or more commands',
+      'Haiku',
+      'read-only commands only',
+      'one at a time',
+      'full raw output, untrimmed and without commentary',
+      'skipped part',
+      'stops and reports',
+      'only by you, never by a subagent',
+      'approval',
+    ]) {
+      expect(instructions, contains(rule), reason: rule);
+    }
 
     final (noticeStatus, notice) = await _request(url, {
       'jsonrpc': '2.0',
