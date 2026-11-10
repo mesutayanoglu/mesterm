@@ -37,7 +37,13 @@ abstract class McpGateway {
   List<Map<String, Object?>> listConnections();
   List<Map<String, Object?>> listSessions();
   Future<String> openConnection(String connectionId);
-  Future<Map<String, Object?>> sendCommand(String tabId, String command, {required String intent});
+  Future<Map<String, Object?>> sendCommand(
+    String tabId,
+    String command, {
+    required String intent,
+    bool wait = true,
+    int timeoutMs = 15000,
+  });
   Map<String, Object?> readOutput(String tabId, int cursor);
   Map<String, Object?> readScreen(String tabId, {int lines = 200});
   void close();
@@ -164,7 +170,13 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   }
 
   @override
-  Future<Map<String, Object?>> sendCommand(String tabId, String command, {required String intent}) async {
+  Future<Map<String, Object?>> sendCommand(
+    String tabId,
+    String command, {
+    required String intent,
+    bool wait = true,
+    int timeoutMs = 15000,
+  }) async {
     if (command.isEmpty ||
         command.length > 4096 ||
         command.contains('\r') ||
@@ -197,8 +209,93 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
       if (!identical(again, c)) throw StateError('The session changed while the user decided.');
     }
     final cursor = capture?.end ?? 0;
+    final startLine = c.terminal.buffer.absoluteCursorY;
     c.terminal.onOutput?.call('$command\r');
-    return {'cursor': cursor, 'asked_user': asked};
+    if (!wait) return {'cursor': cursor, 'asked_user': asked};
+
+    // The wait starts here, after any approval: the user's thinking time is
+    // not the device's.
+    final timedOut = await _waitForPrompt(c, capture, Duration(milliseconds: timeoutMs.clamp(100, 600000)));
+    final prompt = promptOf(c.terminal);
+    final String output;
+    if (capture != null) {
+      output = _commandOutput(capture.textFrom(cursor), command, prompt);
+    } else {
+      // A serial console has no output stream: what came below the
+      // command's line, up to the prompt.
+      final b = c.terminal.buffer;
+      final end = b.absoluteCursorY;
+      output = [
+        for (var i = startLine + 1; i < end && i < b.height; i++)
+          if (i >= 0) b.lines[i].getText().trimRight(),
+      ].join('\n');
+    }
+    return {
+      'output': output,
+      'prompt': prompt,
+      'config_mode': isConfigPrompt(prompt),
+      'timed_out': timedOut,
+      'status': c.status.name,
+      'truncated': false,
+      'cursor': capture?.end ?? 0,
+      'asked_user': asked,
+    };
+  }
+
+  static const _poll = Duration(milliseconds: 50);
+
+  /// How long the output must stay still, with a prompt under the cursor,
+  /// before the command counts as finished.
+  static const _quiet = Duration(milliseconds: 200);
+
+  /// A line a device or shell waits at: ends in `#`, `>`, `$`, `%` or `]`.
+  static final _promptLike = RegExp(r'[#>$%\]]\s*$');
+
+  static bool looksLikePrompt(String line) {
+    final l = line.trimRight();
+    return l.isNotEmpty && l.length <= 200 && (_promptLike.hasMatch(l) || isConfigPrompt(l));
+  }
+
+  /// Waits until something came back and the cursor rests on a prompt again
+  /// (as read_screen sees it), with the output still for [_quiet]. True when
+  /// [timeout] ran out first.
+  Future<bool> _waitForPrompt(TerminalSessionController c, _CapturedSession? capture, Duration timeout) async {
+    final started = DateTime.now();
+    Object signature() {
+      final b = c.terminal.buffer;
+      return capture?.end ?? '${b.height}:${b.absoluteCursorY}:${b.cursorX}';
+    }
+
+    final first = signature();
+    var last = first;
+    var lastChange = started;
+    while (true) {
+      await Future<void>.delayed(_poll);
+      final now = DateTime.now();
+      final sig = signature();
+      if (sig != last) {
+        last = sig;
+        lastChange = now;
+      }
+      final moved = last != first;
+      if (moved && now.difference(lastChange) >= _quiet && looksLikePrompt(promptOf(c.terminal))) return false;
+      if (c.status == SessionStatus.closed || c.status == SessionStatus.error) return false;
+      if (now.difference(started) >= timeout) return true;
+    }
+  }
+
+  /// The command's own output: without the echoed command line at the top
+  /// and the prompt it ended at.
+  static String commandOutput(String text, String command, String prompt) => _commandOutput(text, command, prompt);
+
+  static String _commandOutput(String text, String command, String prompt) {
+    var lines = text.split('\n');
+    if (lines.isNotEmpty && lines.first.contains(command.trim())) lines = lines.sublist(1);
+    if (lines.isNotEmpty) {
+      final last = lines.last.replaceAll('\r', '').trimRight();
+      if (last.isEmpty || last == prompt.trimRight() || looksLikePrompt(last)) lines = lines.sublist(0, lines.length - 1);
+    }
+    return lines.join('\n');
   }
 
   @override
@@ -250,6 +347,9 @@ class _CapturedSession {
   static const _page = 8192;
 
   int get end => _start + _output.length;
+
+  /// Everything from [cursor] on (or from the oldest kept, if it is older).
+  String textFrom(int cursor) => _output.substring((max(cursor, _start) - _start).clamp(0, _output.length));
 
   void _append(String text) {
     _output += text;
@@ -473,10 +573,16 @@ class McpServer extends ChangeNotifier {
           value = {'tab_id': await gateway.openConnection(_string(args, 'connection_id'))};
           break;
         case 'send_command':
+          final wait = args['wait'] ?? true;
+          final timeout = args['timeout_ms'] ?? 15000;
+          if (wait is! bool) throw ArgumentError('wait must be true or false.');
+          if (timeout is! int) throw ArgumentError('timeout_ms must be an integer.');
           value = await gateway.sendCommand(
             _string(args, 'tab_id'),
             _string(args, 'command'),
             intent: _string(args, 'intent'),
+            wait: wait,
+            timeoutMs: timeout,
           );
           break;
         case 'read_output':
@@ -563,6 +669,8 @@ class McpServer extends ChangeNotifier {
             'type': 'string',
             'enum': ['read', 'change'],
           },
+          'wait': {'type': 'boolean', 'default': true},
+          'timeout_ms': {'type': 'integer', 'default': 15000, 'minimum': 100},
         },
         'required': ['tab_id', 'command', 'intent'],
       },

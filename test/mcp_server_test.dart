@@ -34,7 +34,13 @@ class _FakeGateway implements McpGateway {
   }
 
   @override
-  Future<Map<String, Object?>> sendCommand(String tabId, String command, {required String intent}) async {
+  Future<Map<String, Object?>> sendCommand(
+    String tabId,
+    String command, {
+    required String intent,
+    bool wait = true,
+    int timeoutMs = 15000,
+  }) async {
     if (tabId != 'session-01') throw ArgumentError('Unknown session');
     sent = command;
     sentIntent = intent;
@@ -250,6 +256,10 @@ void main() {
     Future<(String, PtySessionController, List<String>)> open(String id) async {
       final tab = await gateway.openConnection(id);
       final c = app.tabs.last.controller as PtySessionController;
+      // There is no real ssh here: let the start fail, then act as a live
+      // session, so a wait never ends early on a dead one.
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      c.status = SessionStatus.running;
       final sent = <String>[];
       c.writeOverride = sent.add;
       return (tab, c, sent);
@@ -267,7 +277,7 @@ void main() {
 
     test('a read the app also knows as read-only runs without asking', () async {
       final (tab, _, sent) = await open('c1');
-      final result = await gateway.sendCommand(tab, 'show ip interface brief | include up', intent: 'read');
+      final result = await gateway.sendCommand(tab, 'show ip interface brief | include up', intent: 'read', wait: false);
       expect(sent, ['show ip interface brief | include up\r']);
       expect(result['asked_user'], isFalse);
       expect(asked, isEmpty);
@@ -276,22 +286,22 @@ void main() {
     test('a change asks first; a no sends nothing, a yes sends it', () async {
       final (tab, _, sent) = await open('c1');
       answer = false;
-      await expectLater(gateway.sendCommand(tab, 'reload', intent: 'change'), throwsStateError);
+      await expectLater(gateway.sendCommand(tab, 'reload', intent: 'change', wait: false), throwsStateError);
       expect(sent, isEmpty);
       expect(asked.single.connectionName, 'CORE-SW');
       expect(asked.single.reason, ChangeReason.agentSaysChange);
 
       answer = true;
-      final result = await gateway.sendCommand(tab, 'reload', intent: 'change');
+      final result = await gateway.sendCommand(tab, 'reload', intent: 'change', wait: false);
       expect(sent, ['reload\r']);
       expect(result['asked_user'], isTrue);
     });
 
     test('both sides must agree: a "read" the app does not know asks', () async {
       final (tab, _, sent) = await open('c1');
-      await gateway.sendCommand(tab, 'write memory', intent: 'read');
+      await gateway.sendCommand(tab, 'write memory', intent: 'read', wait: false);
       expect(asked.single.reason, ChangeReason.unknown);
-      await gateway.sendCommand(tab, 'show run; reload', intent: 'read');
+      await gateway.sendCommand(tab, 'show run; reload', intent: 'read', wait: false);
       expect(asked.last.reason, ChangeReason.chained);
       expect(sent, ['write memory\r', 'show run; reload\r'], reason: 'sent only after the yes');
     });
@@ -299,7 +309,7 @@ void main() {
     test('at a configuration prompt every command asks', () async {
       final (tab, c, _) = await open('c1');
       c.debugReceiveOutput('CORE-SW(config-if)#');
-      await gateway.sendCommand(tab, 'show this', intent: 'read');
+      await gateway.sendCommand(tab, 'show this', intent: 'read', wait: false);
       expect(asked.single.reason, ChangeReason.configMode);
       expect(gateway.readScreen(tab)['config_mode'], isTrue);
     });
@@ -307,7 +317,7 @@ void main() {
     test('"Ask before every command" asks for reads too', () async {
       await gateway.setAskEveryCommand(true);
       final (tab, _, _) = await open('c1');
-      await gateway.sendCommand(tab, 'show version', intent: 'read');
+      await gateway.sendCommand(tab, 'show version', intent: 'read', wait: false);
       expect(asked, hasLength(1));
       final reloaded = AppMcpGateway(app);
       await reloaded.load();
@@ -321,17 +331,75 @@ void main() {
       final c = app.tabs.last.controller as PtySessionController;
       final sent = <String>[];
       c.writeOverride = sent.add;
-      await expectLater(silent.sendCommand(tab, 'reload', intent: 'change'), throwsStateError);
-      await silent.sendCommand(tab, 'show version', intent: 'read');
+      await expectLater(silent.sendCommand(tab, 'reload', intent: 'change', wait: false), throwsStateError);
+      await silent.sendCommand(tab, 'show version', intent: 'read', wait: false);
       expect(sent, ['show version\r']);
       silent.close();
     });
 
     test('a bad intent is refused before anything is asked', () async {
       final (tab, _, sent) = await open('c1');
-      await expectLater(gateway.sendCommand(tab, 'show version', intent: 'maybe'), throwsArgumentError);
+      await expectLater(gateway.sendCommand(tab, 'show version', intent: 'maybe', wait: false), throwsArgumentError);
       expect(sent, isEmpty);
       expect(asked, isEmpty);
+    });
+
+    /// A device that answers each command after [delay]: the echo, [reply]
+    /// and its prompt again.
+    void device(PtySessionController c, String prompt, String Function(String command) reply,
+        {Duration delay = const Duration(milliseconds: 30)}) {
+      c.status = SessionStatus.running;
+      c.debugReceiveOutput(prompt);
+      c.writeOverride = (data) {
+        final command = data.replaceAll('\r', '');
+        Future<void>.delayed(delay, () => c.debugReceiveOutput('$command\r\n${reply(command)}$prompt'));
+      };
+    }
+
+    test('send_command waits for the prompt and returns only the command\'s output', () async {
+      final (tab, c, _) = await open('c1');
+      device(c, 'CORE-SW#', (cmd) => 'Cisco IOS Software, Version 17.9\r\nuptime is 4 weeks\r\n');
+      final result = await gateway.sendCommand(tab, 'show version', intent: 'read');
+      expect(result['timed_out'], isFalse);
+      expect(result['prompt'], 'CORE-SW#');
+      expect(result['config_mode'], isFalse);
+      final output = (result['output'] as String).replaceAll('\r', '');
+      expect(output, 'Cisco IOS Software, Version 17.9\nuptime is 4 weeks');
+      expect(output, isNot(contains('show version')), reason: 'the echoed command line is left out');
+      expect(result['cursor'], greaterThan(0));
+    });
+
+    test('with no prompt in time, what came so far is returned with timed_out', () async {
+      final (tab, c, _) = await open('c1');
+      c.debugReceiveOutput('CORE-SW#');
+      c.writeOverride = (data) => Future<void>.delayed(
+        const Duration(milliseconds: 20),
+        () => c.debugReceiveOutput('show tech\r\nline one\r\nstill going'),
+      );
+      final result = await gateway.sendCommand(tab, 'show tech', intent: 'read', timeoutMs: 500);
+      expect(result['timed_out'], isTrue);
+      expect((result['output'] as String).replaceAll('\r', ''), contains('line one'));
+    });
+
+    test('the wait starts after the user says yes', () async {
+      final (tab, c, _) = await open('c1');
+      device(c, 'CORE-SW#', (cmd) => 'done\r\n');
+      final slow = AppMcpGateway(app, approve: (a) async {
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        return true;
+      });
+      final result = await slow.sendCommand(tab, 'write memory', intent: 'change', timeoutMs: 400);
+      expect(result['timed_out'], isFalse, reason: 'the 600 ms of deciding do not count');
+      expect((result['output'] as String).replaceAll('\r', ''), 'done');
+      slow.close();
+    });
+
+    test('wait: false keeps the old answer: just the cursor', () async {
+      final (tab, _, sent) = await open('c1');
+      final result = await gateway.sendCommand(tab, 'show version', intent: 'read', wait: false);
+      expect(result.keys, containsAll(['cursor', 'asked_user']));
+      expect(result.containsKey('output'), isFalse);
+      expect(sent, ['show version\r']);
     });
 
     test('any open tab can be read, not only ones the agent opened', () async {
