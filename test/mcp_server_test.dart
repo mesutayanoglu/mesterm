@@ -139,15 +139,15 @@ void main() {
     final opened = await call(4, 'open_connection', {
       'connection_id': 'device-01',
     });
-    expect(opened['session_id'], 'session-01');
+    expect(opened['tab_id'], 'session-01');
     final sent = await call(5, 'send_command', {
-      'session_id': 'session-01',
+      'tab_id': 'session-01',
       'command': 'show version',
     });
     expect(sent['cursor'], 5);
     expect(gateway.sent, 'show version');
     final output = await call(6, 'read_output', {
-      'session_id': 'session-01',
+      'tab_id': 'session-01',
       'cursor': 5,
     });
     expect(output['output'], 'ok');

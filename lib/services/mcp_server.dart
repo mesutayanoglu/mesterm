@@ -407,7 +407,7 @@ class McpServer extends ChangeNotifier {
           break;
         case 'open_connection':
           value = {
-            'session_id': await gateway.openConnection(
+            'tab_id': await gateway.openConnection(
               _string(args, 'connection_id'),
             ),
           };
@@ -415,7 +415,7 @@ class McpServer extends ChangeNotifier {
         case 'send_command':
           value = {
             'cursor': await gateway.sendCommand(
-              _string(args, 'session_id'),
+              _string(args, 'tab_id'),
               _string(args, 'command'),
             ),
           };
@@ -423,7 +423,7 @@ class McpServer extends ChangeNotifier {
         case 'read_output':
           final cursor = args['cursor'] ?? 0;
           if (cursor is! int) throw ArgumentError('cursor must be an integer.');
-          value = gateway.readOutput(_string(args, 'session_id'), cursor);
+          value = gateway.readOutput(_string(args, 'tab_id'), cursor);
           break;
         default:
           throw ArgumentError('Unknown tool.');
@@ -473,7 +473,7 @@ class McpServer extends ChangeNotifier {
     },
     {
       'name': 'open_connection',
-      'description': 'Open a saved SSH connection in a CommandS tab and return its MCP session ID.',
+      'description': 'Open a saved SSH connection in a CommandS tab and return its tab_id.',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -488,10 +488,10 @@ class McpServer extends ChangeNotifier {
       'inputSchema': {
         'type': 'object',
         'properties': {
-          'session_id': {'type': 'string'},
+          'tab_id': {'type': 'string'},
           'command': {'type': 'string'},
         },
-        'required': ['session_id', 'command'],
+        'required': ['tab_id', 'command'],
       },
     },
     {
@@ -500,10 +500,10 @@ class McpServer extends ChangeNotifier {
       'inputSchema': {
         'type': 'object',
         'properties': {
-          'session_id': {'type': 'string'},
+          'tab_id': {'type': 'string'},
           'cursor': {'type': 'integer', 'minimum': 0},
         },
-        'required': ['session_id'],
+        'required': ['tab_id'],
       },
     },
   ];
