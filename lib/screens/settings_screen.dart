@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../app_version.dart';
 import '../providers/app_state.dart';
+import '../services/app_shortcuts.dart';
 import '../services/mcp_server.dart';
 import '../services/terminal_appearance.dart';
 import '../services/update_service.dart';
@@ -10,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../widgets/color_picker_dialog.dart';
 import '../widgets/custom_title_bar.dart';
 import '../widgets/import_export_dialog.dart';
+import '../widgets/status_bar.dart' show KeyCap;
 import '../widgets/update_dialog.dart';
 import '../l10n/strings.dart';
 
@@ -51,7 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final divider = Theme.of(context).dividerColor;
     final hasMcpServer = context.watch<McpServer?>() != null;
-    final sections = ['Appearance', 'Connections', if (hasMcpServer) 'MCP integration', 'Updates'];
+    final sections = ['Appearance', 'Keyboard', 'Connections', if (hasMcpServer) 'MCP integration', 'Updates'];
     final current = _current ?? sections.first;
     Widget section(String title, List<Widget> children) =>
         KeyedSubtree(key: _key(title), child: _Section(title: title, children: children));
@@ -68,6 +70,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Label('Language'),
           _LanguagePicker(),
         ]),
+        const SizedBox(height: 22),
+        section('Keyboard', const [_KeyboardPanel()]),
         const SizedBox(height: 22),
         section('Connections', const [_ImportExport()]),
         const SizedBox(height: 22),
@@ -1116,6 +1120,89 @@ class _ColorCodeFieldState extends State<_ColorCodeField> {
           onPressed: _palette,
           iconSize: 16,
           icon: const Icon(Icons.colorize),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard
+// ---------------------------------------------------------------------------
+
+/// The window's shortcuts and the tree's keys, and the Vim option.
+class _KeyboardPanel extends StatelessWidget {
+  const _KeyboardPanel();
+
+  static const _window = <AppCommand, String>{
+    AppCommand.palette: 'Command palette',
+    AppCommand.newConnection: 'New connection',
+    AppCommand.nextTab: 'Next tab',
+    AppCommand.previousTab: 'Previous tab',
+    AppCommand.closeTab: 'Close tab',
+    AppCommand.splitView: 'Split view',
+    AppCommand.settings: 'Open settings',
+  };
+
+  static const _tree = <(String, String)>[
+    ('↑ ↓', 'Move'),
+    ('→ ←', 'Open or close a folder'),
+    ('Enter', 'Connect, or open a folder'),
+    ('F2', 'Rename'),
+    ('Delete', 'Delete'),
+    ('/', 'Filter connections'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final dim = Theme.of(context).textTheme.bodySmall?.color;
+    Widget line(String keys, String what) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(width: 150, child: Align(alignment: Alignment.centerLeft, child: KeyCap(keys))),
+          Expanded(child: Text(tr(what), style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('Vim keys in the connection tree'),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tr(
+                      'j and k move, h and l close and open folders, g and G jump to the top and bottom. Never inside a terminal.',
+                    ),
+                    style: TextStyle(fontSize: 12, color: dim),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Switch(key: const ValueKey('vim-keys'), value: app.vimKeys, onChanged: app.setVimKeys),
+          ],
+        ),
+        const SizedBox(height: 22),
+        const _Label('Window'),
+        for (final e in _window.entries) line(AppShortcuts.label(e.key), e.value),
+        const SizedBox(height: 18),
+        const _Label('Connection tree'),
+        for (final (keys, what) in _tree) line(keys, what),
+        const SizedBox(height: 10),
+        Text(
+          tr('Every other key, plain Ctrl ones included, goes to the session, as in PuTTY.'),
+          style: TextStyle(fontSize: 12, color: dim),
         ),
       ],
     );

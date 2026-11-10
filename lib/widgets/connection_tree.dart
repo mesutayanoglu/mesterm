@@ -58,6 +58,8 @@ class ConnectionTree extends StatefulWidget {
 
 class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObserver {
   final _search = TextEditingController();
+  final _searchFocus = FocusNode(debugLabel: 'tree filter');
+  final _treeFocus = FocusNode(debugLabel: 'connection tree');
   String _query = '';
 
   // Folders start collapsed — expansion state lives here (not per-tile) so
@@ -371,6 +373,8 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _search.dispose();
+    _searchFocus.dispose();
+    _treeFocus.dispose();
     _scroll.dispose();
     _autoScroll?.cancel();
     _hoverExpand?.cancel();
@@ -426,6 +430,8 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
   void _handleRowSelect(_Row row, List<_Row> rows) {
     final id = _rowId(row);
     if (id == null) return;
+    // The arrow keys carry on from the row just clicked.
+    if (!_treeFocus.hasPrimaryFocus) _treeFocus.requestFocus();
     final ctrl = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
     final shift = HardwareKeyboard.instance.isShiftPressed;
 
@@ -477,6 +483,158 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
         ..add(id);
       _lastClickedId = id;
     });
+  }
+
+  /// The rows as shown now: the tree, or the filter's matches.
+  List<_Row> _currentRows(AppState app) {
+    if (_query.isEmpty) return _visibleRows(app);
+    final matches = app.connections.where((c) {
+      return c.name.toLowerCase().contains(_query) || c.host.toLowerCase().contains(_query);
+    }).toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final layoutMatches = app.layouts.where((l) => l.name.toLowerCase().contains(_query)).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return [for (final l in layoutMatches) _Row.layout(l, 0), for (final c in matches) _Row.connection(c, 0)];
+  }
+
+  /// Where the keyboard is in [rows]: the row last clicked or moved to.
+  int _cursor(List<_Row> rows) {
+    final ids = rows.map(_rowId).toList();
+    if (_lastClickedId != null && _selected.contains(_lastClickedId)) {
+      final i = ids.indexOf(_lastClickedId);
+      if (i != -1) return i;
+    }
+    for (var i = 0; i < ids.length; i++) {
+      if (_selected.contains(ids[i])) return i;
+    }
+    return -1;
+  }
+
+  /// Selects only row [i], as a click would, and scrolls it into view.
+  void _moveTo(List<_Row> rows, int i) {
+    if (rows.isEmpty) return;
+    i = i.clamp(0, rows.length - 1);
+    final id = _rowId(rows[i]);
+    if (id == null) return;
+    setState(() {
+      _selected
+        ..clear()
+        ..add(id);
+      _lastClickedId = id;
+    });
+    if (_scroll.hasClients) {
+      final top = i * kTreeRowHeight;
+      final view = _scroll.position.viewportDimension;
+      if (top < _scroll.offset) {
+        _scroll.jumpTo(top);
+      } else if (top + kTreeRowHeight > _scroll.offset + view) {
+        _scroll.jumpTo((top + kTreeRowHeight - view).clamp(0.0, _scroll.position.maxScrollExtent));
+      }
+    }
+  }
+
+  void _setExpanded(String folderId, bool open) {
+    setState(() => open ? _expanded.add(folderId) : _expanded.remove(folderId));
+  }
+
+  /// Explorer's keys, plus j/k/h/l when the Vim option is on:
+  /// up and down move, right opens a folder or steps into it, left closes it
+  /// or steps out to its folder, Enter opens, F2 renames, Delete deletes
+  /// (after asking), Home and End jump, / goes to the filter box.
+  KeyEventResult _onTreeKey(KeyEvent event, AppState app) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final hw = HardwareKeyboard.instance;
+    if (hw.isControlPressed || hw.isAltPressed || hw.isMetaPressed) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final vim = app.vimKeys && !hw.isShiftPressed;
+    final char = event.character;
+
+    if (char == '/') {
+      _searchFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    final rows = _currentRows(app);
+    if (rows.isEmpty) return KeyEventResult.ignored;
+    final at = _cursor(rows);
+    final row = at == -1 ? null : rows[at];
+
+    bool isKey(LogicalKeyboardKey k, [String? vimChar]) =>
+        key == k || (vim && vimChar != null && key.keyLabel.toLowerCase() == vimChar);
+
+    if (isKey(LogicalKeyboardKey.arrowDown, 'j')) {
+      _moveTo(rows, at + 1);
+      return KeyEventResult.handled;
+    }
+    if (isKey(LogicalKeyboardKey.arrowUp, 'k')) {
+      _moveTo(rows, at == -1 ? 0 : at - 1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.home || (vim && key.keyLabel.toLowerCase() == 'g')) {
+      _moveTo(rows, 0);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.end || (app.vimKeys && char == 'G')) {
+      _moveTo(rows, rows.length - 1);
+      return KeyEventResult.handled;
+    }
+    if (row == null) return KeyEventResult.ignored;
+
+    if (isKey(LogicalKeyboardKey.arrowRight, 'l')) {
+      final folder = row.folder;
+      if (folder != null) {
+        if (!_expanded.contains(folder.id)) {
+          _setExpanded(folder.id, true);
+        } else if (at + 1 < rows.length && rows[at + 1].depth > row.depth) {
+          _moveTo(rows, at + 1);
+        }
+      }
+      return KeyEventResult.handled;
+    }
+    if (isKey(LogicalKeyboardKey.arrowLeft, 'h')) {
+      final folder = row.folder;
+      if (folder != null && _expanded.contains(folder.id)) {
+        _setExpanded(folder.id, false);
+      } else if (row.depth > 0) {
+        for (var i = at - 1; i >= 0; i--) {
+          if (rows[i].folder != null && rows[i].depth == row.depth - 1) {
+            _moveTo(rows, i);
+            break;
+          }
+        }
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+      if (row.connection != null) {
+        _connect(row.connection!);
+      } else if (row.folder != null) {
+        _setExpanded(row.folder!.id, !_expanded.contains(row.folder!.id));
+      } else if (row.layout != null) {
+        app.openLayout(row.layout!);
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.f2) {
+      _renameFromKeyboard(row, app);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.delete) {
+      if (row.connection != null || row.folder != null) _deleteSelected(app);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Future<void> _renameFromKeyboard(_Row row, AppState app) async {
+    final conn = row.connection;
+    final folder = row.folder;
+    if (conn != null) {
+      final name = await showTextInputDialog(context, title: 'Rename connection', initial: conn.name);
+      if (name != null) await app.renameConnection(conn.id, name);
+    } else if (folder != null) {
+      final name = await showTextInputDialog(context, title: 'Rename folder', initial: folder.name);
+      if (name != null) await app.renameFolder(folder.id, name);
+    }
+    if (mounted) _treeFocus.requestFocus();
   }
 
   Future<void> _connect(SavedConnection conn) async {
@@ -553,6 +711,7 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
 
     return Focus(
       autofocus: true,
+      focusNode: _treeFocus,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.keyA &&
@@ -560,7 +719,10 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
           _selectAll(app);
           return KeyEventResult.handled;
         }
-        return KeyEventResult.ignored;
+        // The rest only for the tree itself: keys typed in the filter box
+        // pass through here too, and must stay text.
+        if (!_treeFocus.hasPrimaryFocus) return KeyEventResult.ignored;
+        return _onTreeKey(event, app);
       },
       child: _buildBody(context, app),
     );
@@ -577,25 +739,51 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
               Expanded(
                 child: SizedBox(
                   height: 30,
-                  child: TextField(
-                    controller: _search,
-                    onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
-                    style: const TextStyle(fontSize: 12),
-                    decoration: InputDecoration(
-                      hintText: tr('Filter connections'),
-                      hintStyle: const TextStyle(fontSize: 12),
-                      prefixIcon: const Icon(Icons.search, size: 14),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.close, size: 13),
-                              onPressed: () => setState(() {
-                                _search.clear();
-                                _query = '';
-                              }),
-                            ),
+                  child: Focus(
+                    // Down goes from the box into the list; Escape empties
+                    // the box and hands the keys back to the tree.
+                    onKeyEvent: (_, event) {
+                      if (event is KeyUpEvent) return KeyEventResult.ignored;
+                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                        final rows = _currentRows(app);
+                        _treeFocus.requestFocus();
+                        if (rows.isNotEmpty) _moveTo(rows, 0);
+                        return KeyEventResult.handled;
+                      }
+                      if (event.logicalKey == LogicalKeyboardKey.escape) {
+                        setState(() {
+                          _search.clear();
+                          _query = '';
+                        });
+                        _treeFocus.requestFocus();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: _search,
+                      focusNode: _searchFocus,
+                      onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: tr('Filter connections'),
+                        // Says how to get here from the keyboard.
+                        suffixText: _query.isEmpty && !_searchFocus.hasFocus ? '/' : null,
+                        suffixStyle: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
+                        hintStyle: const TextStyle(fontSize: 12),
+                        prefixIcon: const Icon(Icons.search, size: 14),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close, size: 13),
+                                onPressed: () => setState(() {
+                                  _search.clear();
+                                  _query = '';
+                                }),
+                              ),
+                      ),
                     ),
                   ),
                 ),
@@ -796,6 +984,7 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
       for (final c in matches) _Row.connection(c, 0),
     ];
     return ListView.builder(
+      controller: _scroll,
       padding: const EdgeInsets.only(bottom: 8),
       itemCount: layoutMatches.length + matches.length,
       itemExtent: kTreeRowHeight,

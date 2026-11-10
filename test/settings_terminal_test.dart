@@ -89,4 +89,17 @@ void main() {
     final code = tester.widget<TextField>(find.byKey(const ValueKey('color-code'))).controller!.text;
     expect(code, colorToHex(before));
   });
+
+  testWidgets('the Keyboard section lists the shortcuts and turns the Vim keys on', (tester) async {
+    final app = await pump(tester);
+    expect(find.text('Ctrl+Shift+P'), findsOneWidget);
+    expect(find.text('Command palette'), findsOneWidget);
+    expect(app.vimKeys, isFalse);
+    await tester.ensureVisible(find.byKey(const ValueKey('vim-keys')));
+    await tester.tap(find.byKey(const ValueKey('vim-keys')));
+    await tester.pumpAndSettle();
+    expect(app.vimKeys, isTrue);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('commands.vimKeys'), isTrue);
+  });
 }
