@@ -73,7 +73,7 @@ void main() {
     expect(app.tabs, isEmpty);
   });
 
-  testWidgets('a session that is not an SSH one shows nothing while it starts', (tester) async {
+  testWidgets('a session shows no bar while it connects', (tester) async {
     await pump(tester, _Fake(SessionStatus.starting));
     expect(find.byKey(const ValueKey('session-connecting')), findsNothing);
     expect(find.byKey(const ValueKey('session-ended')), findsNothing);

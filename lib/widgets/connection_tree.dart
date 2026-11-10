@@ -1864,9 +1864,11 @@ class _TreeRowState extends State<_TreeRow> {
                                       widget.title,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: isFolder ? 12 : 13,
+                                        fontSize: isFolder ? 12.5 : 13,
                                         height: 1.1,
-                                        color: isFolder ? (isDark ? const Color(0xFFB5B5B5) : const Color(0xFF3D3D3D)) : text,
+                                        // Folders in the full text colour: grey
+                                        // folder names were hard to read.
+                                        color: text,
                                         fontWeight: isFolder ? FontWeight.w600 : (widget.bold ? FontWeight.w500 : FontWeight.w400),
                                         letterSpacing: isFolder ? 0.2 : 0,
                                       ),

@@ -398,6 +398,9 @@ class _SplitViewButton extends StatelessWidget {
         visualDensity: VisualDensity.compact,
         style: IconButton.styleFrom(
           backgroundColor: active ? theme.colorScheme.primary.withValues(alpha: 0.10) : null,
+          // Off until a second tab is open, but still to be seen: Material's
+          // disabled grey all but vanished on the light theme.
+          disabledForegroundColor: theme.textTheme.bodySmall?.color,
         ),
         icon: const Icon(Icons.vertical_split_outlined),
       ),
@@ -1269,10 +1272,10 @@ class _TerminalPaneState extends State<_TerminalPane> {
   }
 }
 
-/// A thin bar over a terminal while its session connects, and after it
-/// failed or ended: what happened, with Reconnect and Close tab, so the next
-/// step is a click away instead of in the tab's right-click menu. The
-/// terminal's own text stays in view under it.
+/// A thin bar over a terminal after its session failed or ended: what
+/// happened, with Reconnect and Close tab, so the next step is a click away
+/// instead of in the tab's right-click menu. The terminal's own text stays in
+/// view under it.
 class SessionStateBar extends StatelessWidget {
   const SessionStateBar({super.key, required this.controller, required this.onReconnect});
   final TerminalSessionController controller;
@@ -1301,44 +1304,9 @@ class SessionStateBar extends StatelessWidget {
             : c is SerialSessionController
             ? '${c.port}, ${c.baud} baud'
             : c.host;
-        if (status == SessionStatus.starting) {
-          // Only while the server is being reached: once OpenSSH runs, the
-          // terminal itself shows what happens (a login prompt, a question).
-          if (c is! PtySessionController) return const SizedBox.shrink();
-          return ValueListenableBuilder<bool>(
-            valueListenable: c.reaching,
-            builder: (context, reaching, _) => !reaching
-                ? const SizedBox.shrink()
-                : Container(
-            key: const ValueKey('session-connecting'),
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            color: theme.colorScheme.surface,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.6, color: theme.colorScheme.primary),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    tr('Connecting to {target}', {'target': target}),
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => _closeTab(context),
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                  child: Text(tr('Cancel'), style: const TextStyle(fontSize: 12)),
-                ),
-              ],
-            ),
-          ),
-          );
-        }
+        // Nothing while it connects: the terminal itself says so ("Connecting
+        // to ..."), and a bar that came and went made the pane jump.
+        if (status == SessionStatus.starting) return const SizedBox.shrink();
         final failed = status == SessionStatus.error;
         final detail = c is PtySessionController ? c.lastError : null;
         final red = dark ? const Color(0xFFFF8A8E) : const Color(0xFFC62828);

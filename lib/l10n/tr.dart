@@ -346,7 +346,6 @@ const turkish = <String, String>{
   '↑ ↓ to choose': '↑ ↓ seç',
   'Enter to open': 'Enter aç',
   'Esc to close': 'Esc kapat',
-  'Connecting to {target}': '{target} adresine bağlanılıyor',
   'Could not connect to {target}': '{target} adresine bağlanılamadı',
   // ---- Settings: terminal appearance ----
   'A font that is not installed falls back to the default.': 'Kurulu olmayan bir yazı tipi varsayılana döner.',

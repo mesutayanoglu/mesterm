@@ -132,10 +132,9 @@ Do not "simplify" these without reading why.
     Ctrl+Shift, Ctrl+Tab or Ctrl+, so no key a session uses is taken. A
     terminal pane passes each key to `AppShortcuts.handle` before typing it;
     the home screen does the same for keys pressed elsewhere.
-- **The "connecting" bar shows only while the SSH port is being reached**
-  (`PtySessionController.reaching`). After that the terminal itself shows
-  what happens: a `login as:` prompt or a question must not sit under a
-  "connecting" bar.
+- **No bar while a session connects.** The terminal prints "Connecting to
+  ..." itself; a bar that appeared and went away made the pane jump. The
+  bar (`SessionStateBar`) is only for a session that failed or ended.
 
 ## Translations
 
