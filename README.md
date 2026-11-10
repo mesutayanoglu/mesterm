@@ -110,8 +110,12 @@ The tools:
   prompt (`timeout_ms`, default 15000) and returns the command's own output,
   cleaned of escape codes and pager prompts, with `prompt`, `config_mode`,
   `timed_out` and `truncated` (`max_chars`, default 8000, keeps the end).
-  Paging is turned off once per tab on Aruba, Cisco, Palo Alto and Huawei,
-  and pager prompts are answered. `wait: false` returns just the cursor, as
+  Before the first command in a tab, MesTerm waits for the login and
+  answers a "Press any key to continue" banner; paging is turned off once
+  per tab on Aruba/HPE, Cisco, Palo Alto and Huawei, and pager prompts are
+  answered. On a device that redraws the screen for each command
+  (ArubaOS-Switch), the output starts below the command's last echo;
+  `echo_found: false` says no echo was found. `wait: false` returns just the cursor, as
   before.
 - `read_output` (an SSH tab's output since a cursor, cleaned, `max_chars`)
   and `read_screen` (any terminal's text, its prompt and whether that is a

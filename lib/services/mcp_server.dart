@@ -64,6 +64,10 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   /// Output captured per tab since the agent first used it.
   final _captures = <String, _CapturedSession>{};
 
+  /// Tabs the agent already used, with the session (a reconnected tab is a
+  /// new one).
+  final _prepared = <String, SessionController>{};
+
   /// Tabs whose paging was turned off, with the session it was done in (a
   /// reconnected tab is a new session, and pages again).
   final _pagingOff = <String, SessionController>{};
@@ -72,6 +76,9 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   /// configuration change, so it is sent without asking.
   static const pagingOffCommands = {
     DeviceKind.aruba: 'no page',
+    // "HP J9729A Switch" and its kin: the same ProVision / ArubaOS-Switch
+    // family as Aruba's, the same command.
+    DeviceKind.hpe: 'no page',
     DeviceKind.cisco: 'terminal length 0',
     DeviceKind.paloalto: 'set cli pager off',
     DeviceKind.huawei: 'screen-length 0 temporary',
@@ -241,7 +248,7 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
       final again = _terminal(tabId);
       if (!identical(again, c)) throw StateError('The session changed while the user decided.');
     }
-    await _turnPagingOff(tabId, c, capture);
+    await _prepareTab(tabId, c, capture);
     final cursor = capture?.end ?? 0;
     final startLine = c.terminal.buffer.absoluteCursorY;
     c.terminal.onOutput?.call('$command\r');
@@ -277,6 +284,51 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
       'cursor': capture?.end ?? 0,
       'asked_user': asked,
     };
+  }
+
+  /// Before the agent's command, in this order, none of it asked about or
+  /// part of the answer:
+  /// 1. The first time in a tab: wait (10 s at most) for the login to end at
+  ///    a prompt or a "Press any key to continue" banner, so the command is
+  ///    not typed into the login.
+  /// 2. A banner on screen (Aruba and HP switches show one after login): one
+  ///    space, then the prompt. Otherwise the banner swallowed the command's
+  ///    first letter ("show system" ran as "how system").
+  /// 3. Paging off ([_turnPagingOff]).
+  Future<void> _prepareTab(String tabId, TerminalSessionController c, _CapturedSession? capture) async {
+    if (!identical(_prepared[tabId], c)) {
+      _prepared[tabId] = c;
+      await _until(() => looksLikePrompt(promptOf(c.terminal)) || pressAnyKeyShown(c.terminal), const Duration(seconds: 10));
+    }
+    if (pressAnyKeyShown(c.terminal)) {
+      c.terminal.onOutput?.call(' ');
+      await _waitForPrompt(c, capture, const Duration(seconds: 5), answerPager: false);
+    }
+    await _turnPagingOff(tabId, c, capture);
+  }
+
+  static final _pressAnyKey = RegExp(r'press any key to continue', caseSensitive: false);
+
+  /// A "Press any key to continue" banner waiting for its key: in the last
+  /// lines of the screen, with no prompt under the cursor yet.
+  static bool pressAnyKeyShown(Terminal terminal) {
+    if (looksLikePrompt(promptOf(terminal))) return false;
+    final b = terminal.buffer;
+    for (var i = b.height - 1, seen = 0; i >= 0 && seen < 6; i--) {
+      final line = b.lines[i].getText();
+      if (line.trim().isEmpty) continue;
+      seen++;
+      if (_pressAnyKey.hasMatch(line)) return true;
+    }
+    return false;
+  }
+
+  /// Polls [done] until it holds or [timeout] runs out.
+  static Future<void> _until(bool Function() done, Duration timeout) async {
+    final started = DateTime.now();
+    while (!done() && DateTime.now().difference(started) < timeout) {
+      await Future<void>.delayed(_poll);
+    }
   }
 
   /// Once a tab, before the agent's first command in it: the device's own
@@ -319,7 +371,7 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
 
   /// "--More--" and its kin, the way switches and firewalls page.
   static final _pager = RegExp(
-    r'[ \t]*(?:<-+\s*more\s*-+>|-{2,4}\s*\(?more\)?\s*-{2,4})[ \t]*',
+    r'[ \t]*(?:<-+\s*more\s*-+>|-{2,4}\s*\(?more\)?\s*-{2,4})(?:,\s*next page:[^\n]*?quit:\s*control-c)?[ \t]*',
     caseSensitive: false,
   );
 
@@ -843,7 +895,7 @@ class McpServer extends ChangeNotifier {
     },
     {
       'name': 'send_command',
-      'description': 'Type one line followed by Enter into a terminal tab (SSH or serial) and, by default (wait true), wait until the device prompt is back, then return the command\'s own output: no echoed command line, no closing prompt, no escape codes, no pager prompts. There is no need to call read_screen or read_output afterwards for the output. Returns output, prompt, config_mode, timed_out (the prompt did not come back within timeout_ms, default 15000; output is what came so far), truncated (longer than max_chars, default 8000: the end is kept), status and cursor. Paging is turned off once per tab on Aruba, Cisco, Palo Alto and Huawei, and pager prompts are answered automatically. intent says what the command does: "read" for one that only shows something, "change" for anything that changes the device or the host. A read that MesTerm also recognises as read-only runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it (the wait for the prompt starts after the answer), and a refusal is returned as an error. With wait false it returns at once, with only cursor and asked_user, as before.',
+      'description': 'Type one line followed by Enter into a terminal tab (SSH or serial) and, by default (wait true), wait until the device prompt is back, then return the command\'s own output: no echoed command line, no closing prompt, no escape codes, no pager prompts. There is no need to call read_screen or read_output afterwards for the output. Returns output, prompt, config_mode, timed_out (the prompt did not come back within timeout_ms, default 15000; output is what came so far), truncated (longer than max_chars, default 8000: the end is kept), status and cursor. Before the first command in a tab MesTerm waits for the login to finish and answers a "Press any key to continue" banner; paging is turned off once per tab on Aruba/HPE, Cisco, Palo Alto and Huawei, and pager prompts are answered automatically. None of this is asked about or returned. intent says what the command does: "read" for one that only shows something, "change" for anything that changes the device or the host. A read that MesTerm also recognises as read-only runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it (the wait for the prompt starts after the answer), and a refusal is returned as an error. With wait false it returns at once, with only cursor and asked_user, as before.',
       'inputSchema': {
         'type': 'object',
         'properties': {

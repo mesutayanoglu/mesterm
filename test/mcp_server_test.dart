@@ -272,6 +272,8 @@ void main() {
       // session, so a wait never ends early on a dead one.
       await Future<void>.delayed(const Duration(milliseconds: 150));
       c.status = SessionStatus.running;
+      // Logged in: a prompt under the cursor.
+      c.debugReceiveOutput('\r\nCORE-SW#');
       final sent = <String>[];
       c.writeOverride = sent.add;
       return (tab, c, sent);
@@ -367,6 +369,7 @@ void main() {
       final c = app.tabs.last.controller as PtySessionController;
       final sent = <String>[];
       c.writeOverride = sent.add;
+      c.debugReceiveOutput('\r\nCORE-SW#');
       await expectLater(silent.sendCommand(tab, 'reload', intent: 'change', wait: false), throwsStateError);
       await silent.sendCommand(tab, 'show version', intent: 'read', wait: false);
       expect(sent, ['show version\r']);
@@ -385,7 +388,7 @@ void main() {
     void device(PtySessionController c, String prompt, String Function(String command) reply,
         {Duration delay = const Duration(milliseconds: 30)}) {
       c.status = SessionStatus.running;
-      c.debugReceiveOutput(prompt);
+      c.debugReceiveOutput('\r\n$prompt');
       c.writeOverride = (data) {
         final command = data.replaceAll('\r', '');
         Future<void>.delayed(delay, () => c.debugReceiveOutput('$command\r\n${reply(command)}$prompt'));
@@ -464,6 +467,7 @@ void main() {
     test('the paging commands, by device kind', () {
       expect(AppMcpGateway.pagingOffCommands, {
         DeviceKind.aruba: 'no page',
+        DeviceKind.hpe: 'no page',
         DeviceKind.cisco: 'terminal length 0',
         DeviceKind.paloalto: 'set cli pager off',
         DeviceKind.huawei: 'screen-length 0 temporary',
@@ -572,6 +576,97 @@ void main() {
       final result = await gateway.sendCommand(tab, 'show clock', intent: 'read');
       expect(result['echo_found'], isFalse);
       expect(result['output'], contains('some output'));
+    });
+
+    /// An ArubaOS-Switch, as far as these tests need one: after login a
+    /// "Press any key to continue" banner that takes the first key it gets
+    /// (and so the first letter of a command typed into it), long output
+    /// paged with "-- MORE --" until `no page`.
+    void aruba(PtySessionController c, List<String> sent, {bool banner = true}) {
+      const prompt = 'CORE-SW# ';
+      var bannerUp = banner;
+      var paging = true;
+      var pending = <String>[];
+      final log = [for (var i = 1; i <= 60; i++) 'I 11/10/26 09:${i.toString().padLeft(2, '0')} 00076 ports: port $i is now on-line'];
+      void reply(String text) => Future<void>.delayed(const Duration(milliseconds: 15), () => c.debugReceiveOutput(text));
+      void run(String command) {
+        final out = StringBuffer('$command\r\n');
+        if (command == 'no page') {
+          paging = false;
+        } else if (command == 'show system') {
+          out.write('Name : CORE-SW\r\n');
+        } else if (command == 'show logging -r') {
+          if (paging) {
+            out.write(log.take(20).join('\r\n'));
+            out.write('\r\n-- MORE --, next page: Space, next line: Enter, quit: Control-C');
+            pending = log.skip(20).toList();
+            reply(out.toString());
+            return;
+          }
+          out.write('${log.join('\r\n')}\r\n');
+        } else {
+          out.write('Invalid input: ${command.split(' ').first}\r\n');
+        }
+        reply('$out$prompt');
+      }
+
+      c.status = SessionStatus.running;
+      c.debugReceiveOutput(banner ? '\r\nHP J9729A Switch 2920-48G\r\n\r\nPress any key to continue' : '\r\n$prompt');
+      c.writeOverride = (data) {
+        sent.add(data);
+        if (bannerUp) {
+          bannerUp = false;
+          reply('\x1b[2J\x1b[H$prompt');
+          // The key that closed the banner is gone; the rest is typed on.
+          final rest = data.substring(1).replaceAll('\r', '');
+          if (rest.isNotEmpty) Future<void>.delayed(const Duration(milliseconds: 30), () => run(rest));
+          return;
+        }
+        if (data == ' ' && pending.isNotEmpty) {
+          final page = pending.take(20).toList();
+          pending = pending.skip(20).toList();
+          reply('\r\x1b[K${page.join('\r\n')}${pending.isEmpty ? '\r\n$prompt' : '\r\n-- MORE --, next page: Space, next line: Enter, quit: Control-C'}');
+          return;
+        }
+        run(data.replaceAll('\r', ''));
+      };
+    }
+
+    test('a "Press any key" banner gets one space first; then no page; the command last, whole', () async {
+      app.connections.first.device = DeviceKind.aruba;
+      final (tab, c, _) = await open('c1');
+      final sent = <String>[];
+      aruba(c, sent);
+      final result = await gateway.sendCommand(tab, 'show system', intent: 'read');
+      expect(sent, [' ', 'no page\r', 'show system\r'], reason: 'banner key, paging off, then the command');
+      expect(result['output'], 'Name : CORE-SW', reason: 'not "how system"');
+      expect(asked, isEmpty, reason: 'none of the preparation is asked about');
+    });
+
+    test('Aruba: with paging off, show logging -r comes whole, no -- MORE --', () async {
+      app.connections.first.device = DeviceKind.aruba;
+      final (tab, c, _) = await open('c1');
+      final sent = <String>[];
+      aruba(c, sent, banner: false);
+      final result = await gateway.sendCommand(tab, 'show logging -r', intent: 'read');
+      final output = result['output'] as String;
+      expect(output, isNot(contains('MORE')));
+      expect(output, contains('port 1 is now on-line'));
+      expect(output, contains('port 60 is now on-line'));
+      expect(sent, ['no page\r', 'show logging -r\r'], reason: 'no page took: no pager prompt had to be answered');
+    });
+
+    test('Aruba without paging off: the pager is answered and its whole line left out', () async {
+      final (tab, c, _) = await open('c1');
+      final sent = <String>[];
+      aruba(c, sent, banner: false);
+      final result = await gateway.sendCommand(tab, 'show logging -r', intent: 'read');
+      final output = result['output'] as String;
+      expect(sent.where((d) => d == ' '), hasLength(2), reason: 'two pages turned');
+      expect(output, isNot(contains('MORE')));
+      expect(output, isNot(contains('next page')));
+      expect(output, contains('port 60 is now on-line'));
+      expect('\n'.allMatches(output).length, 59, reason: '60 lines, nothing doubled or lost');
     });
 
     test('wait: false keeps the old answer: just the cursor', () async {
