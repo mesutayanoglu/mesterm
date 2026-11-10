@@ -530,6 +530,50 @@ void main() {
       expect(read['cursor'], greaterThan(0));
     });
 
+    test('a device that redraws the whole screen: each output is only its own command\'s', () async {
+      final (tab, c, _) = await open('c1');
+      // ArubaOS-Switch: for every command, ESC[H ESC[K and the whole screen
+      // again, every earlier command and its output included.
+      final screen = <String>[];
+      const prompt = 'CORE-SW# ';
+      final replies = {
+        'show system': ['Name : CORE-SW', 'Uptime : 4 days'],
+        'show vlans': ['VLAN 10 DATA', 'VLAN 20 VOICE'],
+        'show time': ['Mon Nov 10 09:14:22 2026'],
+      };
+      c.status = SessionStatus.running;
+      c.debugReceiveOutput(prompt);
+      c.writeOverride = (data) {
+        final command = data.replaceAll('\r', '');
+        screen.add('$prompt$command');
+        screen.addAll(replies[command]!);
+        final redraw = StringBuffer('\x1b[H\x1b[K');
+        for (final line in screen) {
+          redraw.write('$line\x1b[K\r\n');
+        }
+        redraw.write(prompt);
+        Future<void>.delayed(const Duration(milliseconds: 20), () => c.debugReceiveOutput(redraw.toString()));
+      };
+      for (final command in replies.keys) {
+        final result = await gateway.sendCommand(tab, command, intent: 'read');
+        expect(result['echo_found'], isTrue, reason: command);
+        expect(result['output'], replies[command]!.join('\n'), reason: 'only $command\'s own output');
+      }
+    });
+
+    test('no echo found: the whole text, as before, with echo_found false', () async {
+      final (tab, c, _) = await open('c1');
+      device(c, 'CORE-SW#', (cmd) => 'some output\r\n');
+      // A device that does not echo: the reply drops the command line.
+      c.writeOverride = (data) => Future<void>.delayed(
+        const Duration(milliseconds: 20),
+        () => c.debugReceiveOutput('\r\nsome output\r\nCORE-SW#'),
+      );
+      final result = await gateway.sendCommand(tab, 'show clock', intent: 'read');
+      expect(result['echo_found'], isFalse);
+      expect(result['output'], contains('some output'));
+    });
+
     test('wait: false keeps the old answer: just the cursor', () async {
       final (tab, _, sent) = await open('c1');
       final result = await gateway.sendCommand(tab, 'show version', intent: 'read', wait: false);

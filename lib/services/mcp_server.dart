@@ -252,8 +252,9 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     final timedOut = await _waitForPrompt(c, capture, Duration(milliseconds: timeoutMs.clamp(100, 600000)));
     final prompt = promptOf(c.terminal);
     final String output;
+    var echoFound = true;
     if (capture != null) {
-      output = _commandOutput(stripPager(cleanTerminalText(capture.textFrom(cursor))), command, prompt);
+      (output, echoFound) = outputAfterEcho(stripPager(cleanTerminalText(capture.textFrom(cursor))), command, prompt);
     } else {
       // A serial console has no output stream: what came below the
       // command's line, up to the prompt.
@@ -270,6 +271,7 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
       'prompt': prompt,
       'config_mode': isConfigPrompt(prompt),
       'timed_out': timedOut,
+      'echo_found': echoFound,
       'status': c.status.name,
       'truncated': cut,
       'cursor': capture?.end ?? 0,
@@ -394,6 +396,47 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   /// The command's own output: without the echoed command line at the top
   /// and the prompt it ended at.
   static String commandOutput(String text, String command, String prompt) => _commandOutput(text, command, prompt);
+
+  /// The command's output: what comes below the LAST line where the command
+  /// was echoed after a prompt, without the closing prompt. Devices that
+  /// redraw the whole screen for each command (ArubaOS-Switch sends
+  /// `ESC[H ESC[K` and paints it all again) put every earlier command and
+  /// its output before that line, so only the last echo is this command's.
+  /// No echo found: [_commandOutput] on the whole text, and false.
+  static (String, bool) outputAfterEcho(String text, String command, String prompt) {
+    final cmd = command.trim();
+    final lines = text.split('\n');
+    for (var i = lines.length - 1; i >= 0; i--) {
+      final line = lines[i].trimRight();
+      if (!line.endsWith(cmd)) continue;
+      // Only an echo: the command alone, or after a prompt. A line of
+      // output that happens to end with the same words is not one.
+      final before = line.substring(0, line.length - cmd.length).trimRight();
+      if (before.isNotEmpty && !looksLikePrompt(before)) continue;
+      final rest = lines.sublist(i + 1);
+      return (_withoutClosingPrompt(rest, prompt).join('\n'), true);
+    }
+    return (_commandOutput(text, command, prompt), false);
+  }
+
+  /// [lines] without blank lines at the end, the prompt the command ended at,
+  /// and blank lines before that.
+  static List<String> _withoutClosingPrompt(List<String> lines, String prompt) {
+    final out = [...lines];
+    void trimBlank() {
+      while (out.isNotEmpty && out.last.trim().isEmpty) {
+        out.removeLast();
+      }
+    }
+
+    trimBlank();
+    if (out.isNotEmpty) {
+      final last = out.last.trimRight();
+      if (last == prompt.trimRight() || looksLikePrompt(last)) out.removeLast();
+    }
+    trimBlank();
+    return out;
+  }
 
   static String _commandOutput(String text, String command, String prompt) {
     var lines = text.split('\n');
