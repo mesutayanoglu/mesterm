@@ -467,6 +467,13 @@ void main() {
       expect(AppMcpGateway.stripPager('a\n --More-- \nb'), 'a\nb');
     });
 
+    test('send_command output is clean text', () async {
+      final (tab, c, _) = await open('c1');
+      device(c, 'CORE-SW#', (cmd) => '\x1b[?25l\x1b[1mInterface\x1b[0m   Status  \x1b[K\r\nGi0/1   \x1b[32mup\x1b[0m\r\n\r\n\r\n\r\n\r\nend\r\n');
+      final result = await gateway.sendCommand(tab, 'show int status', intent: 'read');
+      expect(result['output'], 'Interface   Status\nGi0/1   up\n\nend');
+    });
+
     test('wait: false keeps the old answer: just the cursor', () async {
       final (tab, _, sent) = await open('c1');
       final result = await gateway.sendCommand(tab, 'show version', intent: 'read', wait: false);
@@ -505,10 +512,35 @@ void main() {
       app.dispose();
     });
     expect(gateway.readOutput(tab, 0)['output'], '', reason: 'capture starts on first use');
-    controller.debugReceiveOutput('device prompt> ');
+    controller.debugReceiveOutput('\x1b[32mdevice\x1b[0m prompt> \r\n');
     final output = gateway.readOutput(tab, 0);
-    expect(output['output'], 'device prompt> ');
-    expect(output['cursor'], 15);
+    expect(output['output'], 'device prompt>\n', reason: 'cleaned: no colours, no \\r, no trailing space');
+    expect(output['cursor'], 26, reason: 'the cursor still counts what came');
+  });
+
+  group('cleanTerminalText', () {
+    String clean(String s) => AppMcpGateway.cleanTerminalText(s);
+
+    test('escape sequences go: CSI, OSC, erase line, cursor hide, charset', () {
+      expect(clean('\x1b[31mred\x1b[0m'), 'red');
+      expect(clean('a\x1b[Kb\x1b[?25l\x1b[?25h'), 'ab');
+      expect(clean('\x1b]0;window title\x07text'), 'text');
+      expect(clean('\x1b]2;t\x1b\\x'), 'x');
+      expect(clean('\x1b(Bplain\x1b=\x1b>'), 'plain');
+      expect(clean('\x1b[2J\x1b[1;1Htop'), 'top');
+    });
+
+    test('line ends, lone carriage returns, trailing spaces, blank runs', () {
+      expect(clean('a\r\nb\r\n'), 'a\nb\n');
+      expect(clean('a\rb'), 'ab');
+      expect(clean('a   \nb\t\n'), 'a\nb\n');
+      expect(clean('a\n\n\nb'), 'a\n\n\nb', reason: 'two blank lines stay');
+      expect(clean('a\n\n\n\n\nb'), 'a\n\nb', reason: 'more than two become one');
+    });
+
+    test('backspaced characters are taken back', () {
+      expect(clean(' --More-- \x08\x08\x08\x08\x08\x08\x08\x08\x08\x08line'), 'line');
+    });
   });
 
   testWidgets('Settings shows local MCP controls', (tester) async {

@@ -234,16 +234,16 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     final prompt = promptOf(c.terminal);
     final String output;
     if (capture != null) {
-      output = stripPager(_commandOutput(capture.textFrom(cursor), command, prompt));
+      output = _commandOutput(stripPager(cleanTerminalText(capture.textFrom(cursor))), command, prompt);
     } else {
       // A serial console has no output stream: what came below the
       // command's line, up to the prompt.
       final b = c.terminal.buffer;
       final end = b.absoluteCursorY;
-      output = [
+      output = cleanTerminalText(stripPager([
         for (var i = startLine + 1; i < end && i < b.height; i++)
           if (i >= 0) b.lines[i].getText().trimRight(),
-      ].join('\n');
+      ].join('\n')));
     }
     return {
       'output': output,
@@ -271,6 +271,28 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     _pagingOff[tabId] = c;
     c.terminal.onOutput?.call('$command\r');
     await _waitForPrompt(c, capture, const Duration(seconds: 5), answerPager: false);
+  }
+
+  static final _osc = RegExp(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)');
+  static final _csi = RegExp(r'\x1b\[[0-?]*[ -/]*[@-~]');
+  static final _escape = RegExp(r'\x1b(?:[()*+][0-9A-Za-z]|[@-Z\\^_=>78]|$)');
+  static final _erased = RegExp(r'[^\x08\n]\x08');
+  static final _controls = RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]');
+
+  /// Terminal output as text: no escape sequences (colours, cursor moves,
+  /// `ESC[K`, `ESC[?25l`, titles), backspaced characters gone, `\r\n` as
+  /// `\n` and other `\r`s dropped, no spaces at line ends, and no run of
+  /// more than two blank lines (it becomes one).
+  static String cleanTerminalText(String text) {
+    var t = text.replaceAll(_osc, '').replaceAll(_csi, '').replaceAll(_escape, '');
+    // A backspace takes back the character before it (pagers erase
+    // themselves that way).
+    while (_erased.hasMatch(t)) {
+      t = t.replaceAll(_erased, '');
+    }
+    t = t.replaceAll('\r\n', '\n').replaceAll('\r', '').replaceAll(_controls, '');
+    t = t.split('\n').map((l) => l.trimRight()).join('\n');
+    return t.replaceAll(RegExp(r'\n{4,}'), '\n\n');
   }
 
   /// "--More--" and its kin, the way switches and firewalls page.
@@ -367,7 +389,8 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   Map<String, Object?> readOutput(String tabId, int cursor) {
     final capture = _capture(tabId);
     if (capture == null) throw StateError('Use read_screen for this tab.');
-    return capture.read(cursor);
+    final page = capture.read(cursor);
+    return {...page, 'output': cleanTerminalText(page['output'] as String)};
   }
 
   @override
