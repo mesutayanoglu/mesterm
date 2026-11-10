@@ -16,6 +16,7 @@ void main() {
     app.connections.addAll([
       SavedConnection(name: 'DEVICE-01', host: '192.0.2.10', folderId: folder.id),
       SavedConnection(name: 'DEVICE-02', host: 'device-02.example.net', folderId: folder.id),
+      SavedConnection(name: 'DEVICE-09', host: '192.0.2.19'),
     ]);
     await tester.pumpWidget(ChangeNotifierProvider.value(
       value: app,
@@ -25,6 +26,7 @@ void main() {
 
     expect(find.text('CUSTOMER-A'), findsOneWidget);
     expect(find.text('2'), findsNothing, reason: 'folders no longer carry a count');
+    expect(find.text('3'), findsOneWidget, reason: 'the list heading counts every connection');
 
     await tester.tap(find.byIcon(Icons.chevron_right));
     await tester.pumpAndSettle();

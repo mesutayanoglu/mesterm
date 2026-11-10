@@ -733,7 +733,7 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 6),
           child: Row(
             children: [
               Expanded(
@@ -789,16 +789,41 @@ class _ConnectionTreeState extends State<ConnectionTree> with WidgetsBindingObse
                 ),
               ),
               const SizedBox(width: 6),
-              ToolButton(
-                icon: Icons.library_add_check_rounded,
-                tooltip: tr('Select all'),
-                onPressed: app.connections.isEmpty ? null : () => _selectAll(app),
+              _AddButton(
+                onPick: (key) {
+                  if (key == 'connection') {
+                    showNewConnectionDialog(context);
+                  } else if (key == 'folder') {
+                    _promptName(context, 'New folder', '', (name) => app.addFolder(name));
+                  } else if (key == 'all') {
+                    _selectAll(app);
+                  }
+                },
+                canSelectAll: app.connections.isNotEmpty,
               ),
-              const SizedBox(width: 4),
-              ToolButton(
-                icon: Icons.create_new_folder_rounded,
-                tooltip: tr('New folder'),
-                onPressed: () => _promptName(context, 'New folder', '', (name) => app.addFolder(name)),
+            ],
+          ),
+        ),
+        // The list's heading, with how many connections there are.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  tr('Connections').toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 0.4,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
+                ),
+              ),
+              Text(
+                '${app.connections.length}',
+                key: const ValueKey('tree-count'),
+                style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color),
               ),
             ],
           ),
@@ -1717,6 +1742,7 @@ class _TreeRowState extends State<_TreeRow> {
     final text = isDark ? AppColors.darkText : AppColors.lightText;
     final dim = isDark ? AppColors.darkTextDim : AppColors.lightTextDim;
     final overlay = isDark ? Colors.white : Colors.black;
+    final isFolder = widget.expanded != null && widget.icon == Icons.folder;
 
     // Windows 11's navigation pane: a rounded, neutral highlight inset from
     // the panel's edges -- lighter on hover, stronger when selected -- rather
@@ -1749,21 +1775,11 @@ class _TreeRowState extends State<_TreeRow> {
           child: SizedBox(
             height: kTreeRowHeight,
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(4)),
+              margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(6)),
               child: Row(
                 children: [
-                  // The selection pill, as in Remote Desktop Manager and Windows
-                  // 11's own navigation panes.
-                  Container(
-                    width: 3,
-                    height: 14,
-                    margin: const EdgeInsets.only(right: 3),
-                    decoration: BoxDecoration(
-                      color: widget.selected ? text : Colors.transparent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+                  const SizedBox(width: 4),
                   // Indentation alone shows nesting, as in Explorer; guide lines
                   // made the panel busy without saying anything the indent and
                   // the chevrons do not.
@@ -1793,16 +1809,40 @@ class _TreeRowState extends State<_TreeRow> {
                       onPointerDown: _onNameDown,
                       child: Row(
                         children: [
-                          _OpenBadge(
-                            status: widget.openStatus,
-                            cutout: isDark ? AppColors.darkPanel : AppColors.lightPanel,
-                            child: widget.leading ?? Icon(widget.icon, size: 16, color: text),
-                          ),
-                          const SizedBox(width: 8),
+                          // A folder is its chevron and its name; the
+                          // connections under it carry the icons.
+                          if (isFolder && widget.openStatus != null)
+                            // Something inside is open: the same dot as the
+                            // connection's, since a folder has no icon to
+                            // carry it.
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(right: 7),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: switch (widget.openStatus!) {
+                                  SessionStatus.running => const Color(0xFF2EB85C),
+                                  SessionStatus.starting => const Color(0xFFE0A526),
+                                  SessionStatus.error || SessionStatus.closed => const Color(0xFFE5484D),
+                                },
+                              ),
+                            )
+                          else if (!isFolder) ...[
+                            _OpenBadge(
+                              status: widget.openStatus,
+                              cutout: isDark ? AppColors.darkPanel : AppColors.lightPanel,
+                              child: widget.leading ?? Icon(widget.icon, size: 16, color: text),
+                            ),
+                            const SizedBox(width: 8),
+                          ] else
+                            const SizedBox(width: 2),
                           Expanded(
                             child: SizedBox(
                               height: kTreeRowHeight,
-                              child: Row(
+                              child: LayoutBuilder(builder: (context, box) {
+                                final hostMax = (box.maxWidth * 0.4).clamp(0.0, 140.0);
+                                return Row(
                                 children: [
                                   // Expanded, with the host left at its natural width:
                                   // a Row lays out its inflexible children first, so
@@ -1812,18 +1852,20 @@ class _TreeRowState extends State<_TreeRow> {
                                       widget.title,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: isFolder ? 12.5 : 13,
                                         height: 1.1,
-                                        color: text,
-                                        fontWeight: widget.bold ? FontWeight.w500 : FontWeight.w400,
+                                        color: isFolder ? (isDark ? const Color(0xFFC8C8C8) : const Color(0xFF3A3A3A)) : text,
+                                        fontWeight: isFolder ? FontWeight.w600 : (widget.bold ? FontWeight.w500 : FontWeight.w400),
+                                        letterSpacing: isFolder ? 0.2 : 0,
                                       ),
                                     ),
                                   ),
                                   if (widget.subtitle != null && widget.subtitle!.isNotEmpty) ...[
                                     const SizedBox(width: 8),
                                     ConstrainedBox(
-                                      // A long hostname must not squeeze the name out.
-                                      constraints: const BoxConstraints(maxWidth: 120),
+                                      // A long hostname must not squeeze the name out:
+                                      // it gets at most 40% of the row.
+                                      constraints: BoxConstraints(maxWidth: hostMax),
                                       child: Text(
                                         widget.subtitle!,
                                         overflow: TextOverflow.ellipsis,
@@ -1832,7 +1874,8 @@ class _TreeRowState extends State<_TreeRow> {
                                     ),
                                   ],
                                 ],
-                              ),
+                              );
+                              }),
                             ),
                           ),
                         ],
@@ -1864,6 +1907,50 @@ class _TreeRowState extends State<_TreeRow> {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The tree's one button: new connection, new folder, select all.
+class _AddButton extends StatelessWidget {
+  const _AddButton({required this.onPick, required this.canSelectAll});
+  final ValueChanged<String> onPick;
+  final bool canSelectAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return Tooltip(
+      message: tr('New'),
+      child: Material(
+        color: dark ? AppColors.darkText : AppColors.lightText,
+        borderRadius: BorderRadius.circular(kControlRadius),
+        child: InkWell(
+          key: const Key('sidebar-new-connection'),
+          borderRadius: BorderRadius.circular(kControlRadius),
+          onTap: () async {
+            final box = context.findRenderObject() as RenderBox;
+            final anchor = box.localToGlobal(Offset.zero) & box.size;
+            final key = await showContextMenu(
+              context,
+              anchor: anchor,
+              actions: [
+                const MenuAction('connection', 'New connection', Icons.add),
+                const MenuAction('folder', 'New folder', Icons.create_new_folder_outlined),
+                if (canSelectAll)
+                  const MenuAction('all', 'Select all', Icons.library_add_check_outlined, separatorBefore: true),
+              ],
+            );
+            if (key != null) onPick(key);
+          },
+          child: SizedBox(
+            width: 30,
+            height: 30,
+            child: Icon(Icons.add, size: 16, color: dark ? AppColors.darkBg : AppColors.lightBg),
           ),
         ),
       ),

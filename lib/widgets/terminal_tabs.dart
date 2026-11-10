@@ -169,7 +169,27 @@ class _TabBarRow extends StatelessWidget {
             // Behind the chips, the rest of the strip: a drop there goes last.
             child: DragTarget<_TabDrag>(
               onAcceptWithDetails: (d) => _moveInStrip(app, d.data, null),
-              builder: (context, _, _) => ListView(scrollDirection: Axis.horizontal, children: chips),
+              builder: (context, _, _) => ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(left: 6),
+                children: [
+                  ...chips,
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, left: 2),
+                    child: SizedBox(
+                      width: 30,
+                      child: IconButton(
+                        key: const ValueKey('tab-strip-new'),
+                        tooltip: tr('New Connection'),
+                        padding: EdgeInsets.zero,
+                        iconSize: 16,
+                        onPressed: () => showNewConnectionDialog(context),
+                        icon: const Icon(Icons.add),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           if (app.activeGroupId != null) _SeparateButton(groupId: app.activeGroupId!),
@@ -434,6 +454,7 @@ class _TabChip extends StatefulWidget {
 }
 
 class _TabChipState extends State<_TabChip> {
+  bool _hover = false;
   /// Which side of this chip a dragged tab would land on; null when none.
   bool? _dropAfter;
   bool _dragging = false;
@@ -460,59 +481,97 @@ class _TabChipState extends State<_TabChip> {
   }
 
   Widget _chip(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      constraints: BoxConstraints(minWidth: widget.nested ? 90 : 120, maxWidth: widget.nested ? 170 : 200),
-      height: 36,
-      margin: const EdgeInsets.only(right: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: widget.nested
-            ? scheme.primary.withValues(alpha: widget.active ? 0.08 : 0.04)
-            : widget.active
-            ? scheme.surface
-            : Colors.transparent,
-        border: Border(
-          bottom: BorderSide(
-            color: widget.active ? scheme.primary.withValues(alpha: widget.nested ? 0.5 : 1) : Colors.transparent,
-            width: 2,
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final dim = theme.textTheme.bodySmall?.color;
+    final text = theme.textTheme.bodyMedium?.color;
+    // The active tab is a card in the terminal's own colour, open at the
+    // bottom onto the session, as in a browser; the others are bare text.
+    final terminalBg = context.select<AppState, Color>((a) => a.terminalBackground);
+    final active = widget.active;
+    final Color fill;
+    if (widget.nested) {
+      fill = (dark ? Colors.white : Colors.black).withValues(alpha: active ? 0.08 : 0.04);
+    } else if (active) {
+      fill = terminalBg;
+    } else if (_hover) {
+      fill = (dark ? Colors.white : Colors.black).withValues(alpha: dark ? 0.05 : 0.04);
+    } else {
+      fill = Colors.transparent;
+    }
+    final fg = active && !widget.nested ? _onColor(terminalBg) : (active ? text : dim);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Container(
+        constraints: BoxConstraints(minWidth: widget.nested ? 90 : 120, maxWidth: widget.nested ? 170 : 200),
+        height: 36,
+        margin: const EdgeInsets.only(right: 2),
+        padding: const EdgeInsets.only(top: 6),
+        decoration: const BoxDecoration(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+            border: active && !widget.nested
+                ? Border(
+                    top: BorderSide(color: theme.dividerColor),
+                    left: BorderSide(color: theme.dividerColor),
+                    right: BorderSide(color: theme.dividerColor),
+                  )
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              // The session's current status, read directly. It used to come
+              // from a StreamBuilder with no initial value, which only learns
+              // of the *next* change: a chip rebuilt after its session had
+              // connected (applying a split does that) sat grey until
+              // something else happened. The tab bar rebuilds on every status
+              // change anyway.
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: switch (widget.status) {
+                    SessionStatus.running => const Color(0xFF2EB85C),
+                    SessionStatus.starting => const Color(0xFFE0A526),
+                    SessionStatus.error || SessionStatus.closed => const Color(0xFFE5484D),
+                  },
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // A split says so with its icon; a plain session needs none.
+              if (widget.isGroup) ...[Icon(widget.icon, size: 13, color: fg), const SizedBox(width: 6)],
+              Expanded(
+                child: Text(
+                  widget.title,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: fg, fontWeight: active ? FontWeight.w500 : FontWeight.w400),
+                ),
+              ),
+              const SizedBox(width: 4),
+              InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: widget.onClose,
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: Icon(Icons.close, size: 13, color: active || _hover ? fg : dim),
+                ),
+              ),
+            ],
           ),
         ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        children: [
-          // The session's current status, read directly. It used to come from
-          // a StreamBuilder with no initial value, which only learns of the
-          // *next* change: a chip rebuilt after its session had connected
-          // (applying a split does that) sat grey until something else
-          // happened. The tab bar rebuilds on every status change anyway.
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              color: switch (widget.status) {
-                SessionStatus.running => const Color(0xFF2EB85C),
-                SessionStatus.starting => const Color(0xFFE0A526),
-                SessionStatus.error || SessionStatus.closed => const Color(0xFFE5484D),
-              },
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Icon(widget.icon, size: 12),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(widget.title, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-          ),
-          InkWell(
-            onTap: widget.onClose,
-            child: const Padding(padding: EdgeInsets.all(2), child: Icon(Icons.close, size: 14)),
-          ),
-        ],
-      ),
     );
   }
+
+  /// Text that reads on the active tab, whatever the terminal colour is.
+  static Color _onColor(Color bg) =>
+      bg.computeLuminance() > 0.4 ? const Color(0xFF141414) : const Color(0xFFF2F2F2);
 
   void _dragStarted() {
     setState(() => _dragging = true);

@@ -136,6 +136,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Seri'), findsOneWidget);
-    expect(find.text('0 bağlantı'), findsOneWidget);
+    expect(find.text('BAĞLANTILAR'), findsOneWidget);
+    expect(find.text('HIZLI BAĞLAN'), findsOneWidget);
   });
 }

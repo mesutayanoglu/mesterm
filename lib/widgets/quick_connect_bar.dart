@@ -90,11 +90,10 @@ class _QuickConnectBarState extends State<QuickConnectBar> {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
     final theme = Theme.of(context);
     final serial = _protocol == QuickProtocol.serial;
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: theme.dividerColor)),
       ),
@@ -107,10 +106,15 @@ class _QuickConnectBarState extends State<QuickConnectBar> {
               children: [
                 Expanded(
                   child: Text(
-                    trCount(app.connections.length, '{n} connection', '{n} connections'),
+                    tr('Quick connect').toUpperCase(),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: TextStyle(fontSize: 10, color: theme.textTheme.bodySmall?.color),
+                    style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 0.4,
+                      fontWeight: FontWeight.w500,
+                      color: theme.textTheme.bodySmall?.color,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),

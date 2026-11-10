@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_state.dart';
+import '../theme/app_theme.dart';
 import '../services/app_shortcuts.dart';
 
 import '../widgets/command_palette.dart';
@@ -71,7 +72,16 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
         body: Column(
           children: [
-            CustomTitleBar(actions: [_PaletteButton(onTap: () => _run(AppCommand.palette))]),
+            CustomTitleBar(
+              center: _PaletteButton(onTap: () => _run(AppCommand.palette)),
+              actions: [
+                // Only appears once a newer release has been found.
+                const UpdateButton(compact: true),
+                const SizedBox(width: 6),
+                _HeaderIcon(icon: Icons.settings_outlined, tooltip: tr('Settings'), onTap: () => showSettings(context)),
+                const SizedBox(width: 6),
+              ],
+            ),
             Expanded(
               child: Row(
                 children: [
@@ -79,57 +89,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: width,
                     child: Column(
                       children: [
-                        Container(
-                          height: 32,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(
-                            border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
-                          ),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                height: 26,
-                                child: width < 230
-                                    ? Tooltip(
-                                        message: tr('New Connection'),
-                                        child: ElevatedButton(
-                                          key: const Key('sidebar-new-connection'),
-                                          style: ElevatedButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                                            minimumSize: const Size(0, 26),
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          ),
-                                          onPressed: () => showNewConnectionDialog(context),
-                                          child: const Icon(Icons.add, size: 15),
-                                        ),
-                                      )
-                                    : ElevatedButton.icon(
-                                        key: const Key('sidebar-new-connection'),
-                                        style: ElevatedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                          minimumSize: const Size(0, 26),
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        onPressed: () => showNewConnectionDialog(context),
-                                        icon: const Icon(Icons.add, size: 15),
-                                        label: Text(tr('New Connection'), style: const TextStyle(fontSize: 12)),
-                                      ),
-                              ),
-                              const Spacer(),
-                              // Only appears once a newer release has been found.
-                              const UpdateButton(compact: true),
-                              const SizedBox(width: 8),
-                              // Theme, terminal colours, import/export and
-                              // updates all live on the Settings page now,
-                              // instead of four unlabelled icons here.
-                              _HeaderIcon(
-                                icon: Icons.settings_outlined,
-                                tooltip: tr('Settings'),
-                                onTap: () => showSettings(context),
-                              ),
-                            ],
-                          ),
-                        ),
                         const Expanded(child: ConnectionTree()),
                         const QuickConnectBar(),
                       ],
@@ -159,11 +118,12 @@ class _PaletteButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
     final dim = theme.textTheme.bodySmall?.color;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 440, minWidth: 160),
       child: Material(
-        color: theme.colorScheme.surface,
+        color: dark ? AppColors.darkPanel : AppColors.lightPanelAlt,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(6),
           side: BorderSide(color: theme.dividerColor),
@@ -173,13 +133,19 @@ class _PaletteButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               children: [
                 Icon(Icons.search, size: 14, color: dim),
-                const SizedBox(width: 6),
-                Text(tr('Search'), style: TextStyle(fontSize: 12, color: dim)),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tr('Search connections and commands'),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: dim),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 KeyCap(AppShortcuts.label(AppCommand.palette)),
               ],
             ),

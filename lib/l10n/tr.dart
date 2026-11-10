@@ -380,4 +380,5 @@ const turkish = <String, String>{
   'j and k move, h and l close and open folders, g and G jump to the top and bottom. Never inside a terminal.': 'j ve k gezer, h ve l klasörü kapatır ve açar, g ve G en üste ve en alta gider. Terminalin içinde hiçbir zaman çalışmaz.',
   'Every other key, plain Ctrl ones included, goes to the session, as in PuTTY.': 'Düz Ctrl tuşları dahil diğer tüm tuşlar, PuTTY\'deki gibi oturuma gider.',
   'Open settings': 'Ayarları aç',
+  'Quick connect': 'Hızlı bağlan',
 };

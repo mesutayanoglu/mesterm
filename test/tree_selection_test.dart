@@ -51,7 +51,9 @@ void main() {
 
   /// Selects everything from the keyboard, so nothing was clicked in the list.
   Future<void> selectAll(WidgetTester tester) async {
-    await tester.tap(find.byIcon(Icons.library_add_check_rounded));
+    await tester.tap(find.byKey(const Key('sidebar-new-connection')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select all'));
     await tester.pumpAndSettle();
     expect(find.text('3'), findsOneWidget, reason: 'the selection bar counts 3');
   }

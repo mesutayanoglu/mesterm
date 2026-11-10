@@ -96,6 +96,10 @@ Do not "simplify" these without reading why.
     not with a double-tap recognizer, which would delay every single click.
   - The click memory is static, keyed by row id, because rows rebuild between
     the two clicks.
+- **The tree takes keys only while it has the focus itself**
+  (`_treeFocus.hasPrimaryFocus`). Keys typed in the filter box bubble
+  through the tree's `Focus` too; without the check, j or Delete typed there
+  would move or delete rows.
 - **Dragging in the tree** uses `_ThresholdDragRecognizer`.
   - A drag starts only after 6 px of movement. When the recognizer is the
     arena's only member, it wins at pointer-down, so the start is deferred

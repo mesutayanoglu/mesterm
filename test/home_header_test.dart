@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('New Connection shares header with Settings and opens its dialog', (tester) async {
+  testWidgets('the sidebar\'s + opens a new connection; settings and search are in the title bar', (tester) async {
     SharedPreferences.setMockInitialValues({});
     UpdateService.available.value = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -28,11 +28,18 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // The "+" sits at the right of the filter box, inside the sidebar; the
+    // settings and the update button live in the title bar.
     final button = find.byKey(const Key('sidebar-new-connection'));
     expect(button, findsOneWidget);
-    expect(tester.getTopLeft(button).dx, lessThan(24));
-    expect((tester.getCenter(button).dy - tester.getCenter(find.byIcon(Icons.settings_outlined)).dy).abs(),
-        lessThan(4));
+    expect(tester.getTopRight(button).dx, lessThanOrEqualTo(app.sidebarWidth));
+    final settings = find.byIcon(Icons.settings_outlined);
+    expect(tester.getCenter(settings).dy, lessThan(40), reason: 'in the title bar');
+
+    // The search is in the middle of the window, the name at its left edge.
+    final search = find.byKey(const ValueKey('title-bar-search'));
+    expect((tester.getCenter(search).dx - 450).abs(), lessThan(2));
+    expect(tester.getTopLeft(find.byKey(const ValueKey('title-bar-name'))).dx, lessThan(30));
 
     UpdateService.available.value = const UpdateInfo(
       version: 'v9.9.9',
@@ -47,10 +54,12 @@ void main() {
     app.setSidebarWidth(AppState.minSidebarWidth);
     await tester.pump();
     expect(button, findsOneWidget);
-    expect(tester.getTopLeft(button).dx, lessThan(24));
+    expect(tester.getTopRight(button).dx, lessThanOrEqualTo(AppState.minSidebarWidth));
     expect(tester.takeException(), isNull);
 
     await tester.tap(button);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New connection'));
     await tester.pumpAndSettle();
     expect(find.text('CONNECTION'), findsOneWidget);
   });

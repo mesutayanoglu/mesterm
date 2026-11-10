@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 import '../app_version.dart';
 import '../l10n/strings.dart';
 
-const double kTitleBarHeight = 32;
+const double kTitleBarHeight = 36;
 
 /// Replaces the native Windows caption (which just shows the OS accent
 /// color — orange, in this case — behind plain system buttons) with one
@@ -21,13 +21,17 @@ const double kTitleBarHeight = 32;
 /// the OS there, and a Windows-shaped close button on the wrong side of a
 /// Mac window is worse than no button.
 class CustomTitleBar extends StatefulWidget {
-  const CustomTitleBar({super.key, this.title, this.actions = const []});
+  const CustomTitleBar({super.key, this.title, this.actions = const [], this.center});
 
   /// What the bar says in its middle; the app's name by default.
   final String? title;
 
   /// Buttons of the window's own, before the minimise button.
   final List<Widget> actions;
+
+  /// Something in the middle of the bar (the main window's search). With
+  /// one, the name moves to the left edge.
+  final Widget? center;
 
   @override
   State<CustomTitleBar> createState() => _CustomTitleBarState();
@@ -85,9 +89,50 @@ class _CustomTitleBarState extends State<CustomTitleBar> with WindowListener {
         ),
       ),
     );
+    final bg = isDark ? AppColors.darkBg : AppColors.lightBg;
+    if (widget.center != null) {
+      final name = IgnorePointer(
+        child: Row(
+          key: const ValueKey('title-bar-name'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const AppMark(size: 16),
+            const SizedBox(width: 8),
+            Text(
+              widget.title ?? appName,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+                color: isDark ? AppColors.darkText : AppColors.lightText,
+              ),
+            ),
+          ],
+        ),
+      );
+      return Container(
+        height: kTitleBarHeight,
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+        ),
+        child: Stack(
+          children: [
+            _buttons(isMac),
+            // The name at the left (past the traffic lights on a Mac), the
+            // search in the middle of the window. Both over the drag area,
+            // which still takes the rest of the bar.
+            Positioned(left: isMac ? 78 : 14, top: 0, bottom: 0, child: Center(child: name)),
+            Positioned.fill(
+              child: Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: widget.center)),
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       height: kTitleBarHeight,
-      color: isDark ? AppColors.darkBg : AppColors.lightBg,
+      color: bg,
       child: Stack(
         children: [
           _buttons(isMac),
