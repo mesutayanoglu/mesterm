@@ -125,34 +125,58 @@ class _PaletteButton extends StatelessWidget {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     final dim = theme.textTheme.bodySmall?.color;
+    // A fixed height: sized by its content, the box shrank to the height of
+    // the key hint and looked squashed.
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 440, minWidth: 160, maxHeight: 26),
-      child: Material(
-        color: dark ? AppColors.darkPanel : AppColors.lightPanelAlt,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-          side: BorderSide(color: theme.dividerColor),
-        ),
-        child: InkWell(
-          key: const ValueKey('title-bar-search'),
-          borderRadius: BorderRadius.circular(6),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              children: [
-                Icon(Icons.search, size: 14, color: dim),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tr('Search connections and commands'),
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: dim),
+      constraints: const BoxConstraints(maxWidth: 440, minWidth: 160),
+      child: SizedBox(
+        height: 28,
+        child: Material(
+          color: dark ? AppColors.darkPanel : AppColors.lightPanelAlt,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+            side: BorderSide(color: theme.dividerColor),
+          ),
+          child: InkWell(
+            key: const ValueKey('title-bar-search'),
+            borderRadius: BorderRadius.circular(6),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 10, right: 6),
+              child: Row(
+                children: [
+                  Icon(Icons.search, size: 14, color: dim),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      tr('Search connections and commands'),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: TextStyle(fontSize: 12.5, color: dim),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                KeyCap(AppShortcuts.label(AppCommand.palette)),
-              ],
+                  const SizedBox(width: 8),
+                  // The keys as a quiet tag inside the box, not a second
+                  // outlined box squeezed into it.
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: dark ? AppColors.darkPanelAlt : AppColors.lightBorder,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      AppShortcuts.label(AppCommand.palette),
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.2,
+                        fontFamily: 'Consolas',
+                        fontFamilyFallback: const ['Menlo', 'monospace'],
+                        color: dark ? const Color(0xFFB5B5B5) : const Color(0xFF3D3D3D),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

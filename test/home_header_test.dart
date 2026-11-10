@@ -39,6 +39,8 @@ void main() {
     // The search is in the middle of the window, the name at its left edge.
     final search = find.byKey(const ValueKey('title-bar-search'));
     expect((tester.getCenter(search).dx - 450).abs(), lessThan(2));
+    expect(tester.getSize(search).height, 28, reason: 'a fixed height, not squashed to its content');
+    expect(tester.getSize(search).width, 440);
     expect(tester.getTopLeft(find.byKey(const ValueKey('title-bar-name'))).dx, lessThan(30));
 
     UpdateService.available.value = const UpdateInfo(
