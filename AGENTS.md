@@ -163,18 +163,29 @@ Do not "simplify" these without reading why.
 
 ## Releasing
 
-1. Bump `appVersion` in `lib/app_version.dart`.
-2. Write `release-notes/vX.Y.Z.md`: a short list of user-facing changes and
-   fixes in plain English. It is shown in the app's update dialog, so it
-   matters.
-3. Run `flutter analyze` and `flutter test`, then commit and push to `master`.
-4. Tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` then:
-   - builds the Windows installer, the portable zip and the macOS zip onto a
-     draft release;
-   - writes `SHA256SUMS.txt` (the updater checks it);
-   - publishes the release and keeps the latest five.
+Every push to `main` is a release; nobody bumps a version by hand.
+
+1. `.github/workflows/release.yml` runs `flutter analyze lib test` and
+   `flutter test`. If they fail, nothing is tagged or released.
+2. It tags the next patch version (latest `vX.Y.Z` plus one: `v1.0.1`,
+   `v1.0.2`...) on the pushed commit. A re-run of the same commit keeps its
+   tag.
+3. It builds the Windows installer, the portable zip and the macOS zip onto a
+   draft release, writes `SHA256SUMS.txt` (the updater checks it), publishes
+   the release and keeps the latest five.
+4. Installed apps see it within five minutes and ask the user to update.
 5. Installed apps list the app as "MesTerm vX.Y.Z" (`AppVerName` in
    `installer.iss`).
+
+- The version comes from the tag through `--dart-define=COMMANDS_VERSION`;
+  `appVersion` in `lib/app_version.dart` is only the default for local
+  builds.
+- Release notes are the commit subjects since the previous release, unless
+  `release-notes/vX.Y.Z.md` exists for that version. Write commit subjects
+  that make sense to users.
+- A push that only changes Markdown, `docs/` or `LICENSE` is not released.
+- For a minor or major step push the tag by hand (`git tag v1.1.0`,
+  `git push origin v1.1.0`); the automatic count carries on from it.
 
 A `vX.Y.Z-beta.N` tag publishes a GitHub prerelease, without changing the
 latest release. A beta is the same app at a newer version: it installs over

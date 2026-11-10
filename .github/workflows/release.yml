@@ -1,6 +1,13 @@
 name: Build and release
 
-# Push a vX.Y.Z tag for stable or vX.Y.Z-beta.N for a prerelease.
+# Every push to main is a release: tests run, the next patch version is
+# tagged (v1.0.0 -> v1.0.1 -> ...), Windows and macOS are built and the
+# release is published, where the in-app updater finds it.
+#
+# A hand-pushed tag still works: vX.Y.Z (for a minor or major step, e.g.
+# v1.1.0, after which the automatic count carries on from it) or
+# vX.Y.Z-beta.N for a prerelease. The tag this workflow pushes itself does
+# not start a second run (pushes made with GITHUB_TOKEN never do).
 #
 # The builds go straight onto a draft release rather than through workflow
 # artifacts: artifact storage has an account-wide quota, and once it was
@@ -9,51 +16,99 @@ name: Build and release
 # publishes it.
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*.*.*"
       - "v*.*.*-beta.*"
+    # Documentation alone is no new version.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# Two quick pushes must not both take the same version number.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Analyze and test
+        run: |
+          flutter pub get
+          flutter analyze lib test --no-fatal-infos
+          flutter test
+
   version:
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
       channel: ${{ steps.ver.outputs.channel }}
+      tag: ${{ steps.ver.outputs.tag }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
       - id: ver
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-            if [[ "${GITHUB_REF}" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
-              echo "channel=beta" >> "$GITHUB_OUTPUT"
-            elif [[ "${GITHUB_REF}" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "channel=stable" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF#refs/tags/}"
+            if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+              CHANNEL=beta
+            elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              CHANNEL=stable
             else
-              echo "Unsupported release tag: ${GITHUB_REF}" >&2; exit 1
+              echo "Unsupported release tag: ${TAG}" >&2; exit 1
             fi
           else
-            echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
-            echo "channel=stable" >> "$GITHUB_OUTPUT"
+            CHANNEL=stable
+            STABLE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+            # A re-run of the same commit keeps the version it already got.
+            TAG=$(git tag --points-at "$GITHUB_SHA" | grep -E "$STABLE" | sort -V | tail -n1 || true)
+            if [ -z "$TAG" ]; then
+              LAST=$(git tag --list 'v*' --sort=-v:refname | grep -E "$STABLE" | head -n1 || true)
+              [ -z "$LAST" ] && LAST=v1.0.0
+              IFS=. read -r MAJOR MINOR PATCH <<< "${LAST#v}"
+              TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+              git tag "$TAG" "$GITHUB_SHA"
+              git push origin "$TAG"
+            fi
           fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG ($CHANNEL)"
 
       - name: Open a draft release for the builds to land on
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             if [[ "$TAG" == *-beta.* ]]; then
-              gh release create "$TAG" --draft --prerelease --title "MesTerm $TAG" --notes "Building..."
+              gh release create "$TAG" --verify-tag --draft --prerelease --title "MesTerm $TAG" --notes "Building..."
             else
-              gh release create "$TAG" --draft --title "MesTerm $TAG" --notes "Building..."
+              gh release create "$TAG" --verify-tag --draft --title "MesTerm $TAG" --notes "Building..."
             fi
           fi
 
@@ -63,8 +118,11 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
       COMMANDS_CHANNEL: ${{ needs.version.outputs.channel }}
+      TAG: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
 
       - uses: subosito/flutter-action@v2
         with:
@@ -105,12 +163,11 @@ jobs:
           cd dist2 && 7z a "${OUT}.zip" "$OUT"
 
       - name: Attach to the draft release
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${GITHUB_REF#refs/tags/}" dist2/*.zip dist2/*Setup.exe --clobber
+        run: gh release upload "$TAG" dist2/*.zip dist2/*Setup.exe --clobber
 
   macos:
     needs: version
@@ -118,8 +175,11 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
       COMMANDS_CHANNEL: ${{ needs.version.outputs.channel }}
+      TAG: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
 
       - uses: subosito/flutter-action@v2
         with:
@@ -138,20 +198,19 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$APP" "dist2/MesTerm_${VERSION}_macOS.zip"
 
       - name: Attach to the draft release
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${GITHUB_REF#refs/tags/}" dist2/*.zip --clobber
+        run: gh release upload "$TAG" dist2/*.zip --clobber
 
   release:
     needs: [version, windows, macos]
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.version.outputs.version }}
       COMMANDS_CHANNEL: ${{ needs.version.outputs.channel }}
+      TAG: ${{ needs.version.outputs.tag }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
     steps:
@@ -163,7 +222,6 @@ jobs:
       - name: Publish release
         shell: bash
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
           mkdir -p assets
           gh release download "$TAG" -D assets -p '*.zip' -p '*Setup.exe' --clobber
           ls -la assets/

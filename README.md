@@ -119,9 +119,15 @@ automatically, once, on first launch.
 
 ## Releases
 
-Push a `vX.Y.Z` tag to trigger `.github/workflows/release.yml`, which builds
-Windows (installer + portable zip, `plink.exe` bundled) and macOS (zipped
-.app) and publishes a GitHub Release.
+Every push to `main` is a release. `.github/workflows/release.yml` runs the
+analyzer and the tests, tags the next patch version (`v1.0.0`, `v1.0.1`,
+`v1.0.2`...), builds Windows (installer + portable zip, `plink.exe` bundled)
+and macOS (zipped .app) and publishes a GitHub Release. Installed apps find it
+within five minutes and offer the update. A push that only changes Markdown
+or `docs/` makes no release.
+
+For a bigger step, push a tag by hand (`v1.1.0`, `v2.0.0`); the automatic
+count carries on from it.
 
 A `vX.Y.Z-beta.N` tag publishes a GitHub prerelease, without changing the
 latest release. A beta is the same app at a newer version: it installs over
@@ -131,8 +137,8 @@ automatic check offers normal releases only, so a beta install moves on to
 the next normal release.
 
 ```
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 ## Third-party
