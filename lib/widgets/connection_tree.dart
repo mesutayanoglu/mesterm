@@ -1123,10 +1123,6 @@ class _FolderRowState extends State<_FolderRow> {
   @override
   Widget build(BuildContext context) {
     final app = context.read<AppState>();
-    final childCount =
-        app.folders.where((f) => f.parentId == widget.folder.id).length +
-        app.connections.where((c) => c.folderId == widget.folder.id).length +
-        app.layouts.where((l) => l.folderId == widget.folder.id).length;
     return _TreeRow(
       rowId: widget.folder.id,
       depth: widget.depth,
@@ -1143,7 +1139,6 @@ class _FolderRowState extends State<_FolderRow> {
       // chevron already says which.
       icon: Icons.folder,
       title: widget.folder.name,
-      trailingCount: childCount == 0 ? null : childCount,
       bold: true,
       menuItems: const [
         MenuAction('new', 'New connection here', Icons.add),
@@ -1416,7 +1411,6 @@ class _TreeRow extends StatefulWidget {
     required this.menuItems,
     required this.onMenu,
     this.subtitle,
-    this.trailingCount,
     this.expanded,
     this.onToggle,
     this.openStatus,
@@ -1444,9 +1438,6 @@ class _TreeRow extends StatefulWidget {
 
   /// The host, for a connection. Drawn dimmer, after the name.
   final String? subtitle;
-
-  /// How many items a folder holds directly.
-  final int? trailingCount;
 
   /// Null for a row that cannot be expanded; the chevron column is still
   /// reserved either way so names stay aligned down a level.
@@ -1659,21 +1650,6 @@ class _TreeRowState extends State<_TreeRow> {
                       ),
                     ),
                   ),
-                  // Swapped for the "..." button on hover, so the row never has to
-                  // find room for both.
-                  if (widget.trailingCount != null && !_hover)
-                    Container(
-                      margin: const EdgeInsets.only(left: 6, right: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: overlay.withValues(alpha: isDark ? 0.08 : 0.05),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${widget.trailingCount}',
-                        style: TextStyle(fontSize: 10.5, color: dim, height: 1.2),
-                      ),
-                    ),
                   // Kept mounted (not conditionally built) even when hidden:
                   // opening the menu moves the cursor onto its overlay, the
                   // MouseRegion sees that as "exited", and a button removed from
