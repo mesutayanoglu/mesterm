@@ -138,6 +138,13 @@ void main() {
         'read_screen',
       ]),
     );
+    final send = tools.firstWhere((t) => t['name'] == 'send_command') as Map;
+    expect((send['inputSchema']['properties'] as Map).keys, containsAll(['wait', 'timeout_ms', 'max_chars', 'intent']));
+    expect(send['description'], contains('no need to call read_screen'));
+    final list = tools.firstWhere((t) => t['name'] == 'list_connections') as Map;
+    expect((list['inputSchema']['properties'] as Map).keys, containsAll(['folder', 'query', 'protocol', 'device', 'limit']));
+    final read = tools.firstWhere((t) => t['name'] == 'read_output') as Map;
+    expect((read['inputSchema']['properties'] as Map).keys, contains('max_chars'));
 
     Future<Map<String, dynamic>> call(
       int id,

@@ -100,12 +100,23 @@ whether it only reads (`intent: "read"`) or changes something
 - **Settings > MCP integration > Ask before every command** makes reads ask
   too.
 
-The tools: `list_connections`, `list_sessions`, `open_connection`,
-`send_command` (`tab_id`, `command`, `intent`), `read_output` (an SSH tab's
-output from a cursor) and `read_screen` (any terminal's text, its prompt and
-whether that is a configuration prompt). `send_command` returns a cursor;
-pass it to `read_output` and keep using each returned cursor. Output arrives
-asynchronously, so an empty read does not mean the command has finished.
+The tools:
+
+- `list_connections`: filters `folder`, `query` (name or host), `protocol`,
+  `device`, `limit` (default 50); empty fields are left out; returns `total`
+  and `returned`.
+- `list_sessions`, `open_connection`.
+- `send_command` (`tab_id`, `command`, `intent`): by default waits for the
+  prompt (`timeout_ms`, default 15000) and returns the command's own output,
+  cleaned of escape codes and pager prompts, with `prompt`, `config_mode`,
+  `timed_out` and `truncated` (`max_chars`, default 8000, keeps the end).
+  Paging is turned off once per tab on Aruba, Cisco, Palo Alto and Huawei,
+  and pager prompts are answered. `wait: false` returns just the cursor, as
+  before.
+- `read_output` (an SSH tab's output since a cursor, cleaned, `max_chars`)
+  and `read_screen` (any terminal's text, its prompt and whether that is a
+  configuration prompt).
+
 RDP tabs are listed but cannot be read.
 
 When configuring the tunnel client, set `MCP_SERVER_URL` to the displayed URL

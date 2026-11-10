@@ -643,7 +643,7 @@ class McpServer extends ChangeNotifier {
                 : '2025-11-25',
             'capabilities': {'tools': {}},
             'serverInfo': {'name': 'mesterm', 'version': appVersion},
-            'instructions': 'MesTerm is an SSH, serial and RDP connection manager. You can see every saved connection (list_connections) and every open tab (list_sessions), open connections, read any terminal (read_screen, read_output) and run commands (send_command). Say with each command whether it only reads (intent "read") or changes something (intent "change"). A read MesTerm also knows as read-only (show, display, get, ping and the like) runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it, and can be refused. Output arrives asynchronously: poll read_output with the returned cursor until the prompt comes back. Usernames and passwords are never shared.',
+            'instructions': 'MesTerm is an SSH, serial and RDP connection manager. list_connections finds saved connections (filter with folder, query, protocol, device; it returns at most limit, with total), list_sessions shows open tabs, open_connection opens one. send_command types a command and, by default, waits for the prompt and returns the command\'s own output, cleaned of escape codes and pager prompts, so no separate read_screen or read_output call is needed for it. Paging is turned off automatically on Aruba, Cisco, Palo Alto and Huawei. Say with each command whether it only reads (intent "read") or changes something (intent "change"). A read MesTerm also knows as read-only (show, display, get, ping and the like) runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it, and can be refused. Long output is cut to its end (max_chars, truncated). Usernames and passwords are never shared.',
           };
           break;
         case 'ping':
@@ -770,7 +770,7 @@ class McpServer extends ChangeNotifier {
   static const _tools = [
     {
       'name': 'list_connections',
-      'description': 'Every saved connection: id, name, folder path, protocol, host, port, device kind, and the tabs it is open in. Usernames and passwords are not included.',
+      'description': 'Saved connections: id, name, folder path, protocol, host, port, device kind, and the tabs they are open in; empty fields are left out. Optional filters: folder (part of the folder path, any case), query (in the name or the host), protocol (ssh, rdp, serial), device (cisco, aruba, paloalto, huawei, fortinet, linux, windows...), limit (default 50). Returns connections, total (all that match) and returned. Usernames and passwords are not included.',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -800,7 +800,7 @@ class McpServer extends ChangeNotifier {
     },
     {
       'name': 'send_command',
-      'description': 'Type one line followed by Enter into a terminal tab (SSH or serial). intent says what the command does: "read" for one that only shows something, "change" for anything that changes the device or the host. A read that MesTerm also recognises as read-only runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it, and a refusal is returned as an error. Returns the output cursor from before the command and whether the user was asked.',
+      'description': 'Type one line followed by Enter into a terminal tab (SSH or serial) and, by default (wait true), wait until the device prompt is back, then return the command\'s own output: no echoed command line, no closing prompt, no escape codes, no pager prompts. There is no need to call read_screen or read_output afterwards for the output. Returns output, prompt, config_mode, timed_out (the prompt did not come back within timeout_ms, default 15000; output is what came so far), truncated (longer than max_chars, default 8000: the end is kept), status and cursor. Paging is turned off once per tab on Aruba, Cisco, Palo Alto and Huawei, and pager prompts are answered automatically. intent says what the command does: "read" for one that only shows something, "change" for anything that changes the device or the host. A read that MesTerm also recognises as read-only runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it (the wait for the prompt starts after the answer), and a refusal is returned as an error. With wait false it returns at once, with only cursor and asked_user, as before.',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -819,7 +819,7 @@ class McpServer extends ChangeNotifier {
     },
     {
       'name': 'read_output',
-      'description': 'Read up to 8192 characters of an SSH tab\'s output from cursor (capture starts when the tab is first used through MCP). Use the returned cursor for the next read; output can arrive later.',
+      'description': 'All of an SSH tab\'s output since cursor (capture starts when the tab is first used through MCP), cleaned of escape codes and pager prompts. Longer than max_chars (default 8000): the end is kept and truncated is true. Returns output, the cursor for the next read, truncated and status. Not needed after send_command, which returns its output itself; use it after wait false, or for output that arrives later.',
       'inputSchema': {
         'type': 'object',
         'properties': {
