@@ -51,9 +51,9 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             if [[ "$TAG" == *-beta.* ]]; then
-              gh release create "$TAG" --draft --prerelease --title "CommandS $TAG" --notes "Building..."
+              gh release create "$TAG" --draft --prerelease --title "MesTerm $TAG" --notes "Building..."
             else
-              gh release create "$TAG" --draft --title "CommandS $TAG" --notes "Building..."
+              gh release create "$TAG" --draft --title "MesTerm $TAG" --notes "Building..."
             fi
           fi
 
@@ -99,7 +99,7 @@ jobs:
       - name: Zip portable build (no-installer alternative)
         shell: bash
         run: |
-          OUT="CommandS_${VERSION}_windows_portable"
+          OUT="MesTerm_${VERSION}_windows_portable"
           mkdir -p "dist2/$OUT"
           cp -r build/windows/x64/runner/Release/* "dist2/$OUT/"
           cd dist2 && 7z a "${OUT}.zip" "$OUT"
@@ -135,7 +135,7 @@ jobs:
         run: |
           mkdir -p dist2
           APP=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app")
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist2/CommandS_${VERSION}_macOS.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist2/MesTerm_${VERSION}_macOS.zip"
 
       - name: Attach to the draft release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -197,13 +197,13 @@ jobs:
             CHANGELOG_HEADER="## What's changed"
           fi
 
-          NAME="CommandS"
-          PREFIX="CommandS"
-          APP="CommandS.app"
-          EXE="commands.exe"
-          MIGRATION_NOTE='2. Upgrading from 1.0.23 or earlier: the app used to install as `commands.app`. Delete that one — saved connections move across by themselves on first launch.'
+          NAME="MesTerm"
+          PREFIX="MesTerm"
+          APP="MesTerm.app"
+          EXE="mesterm.exe"
+          MIGRATION_NOTE=''
           if [ "$COMMANDS_CHANNEL" = beta ]; then
-            NAME="CommandS Beta"
+            NAME="MesTerm Beta"
             MIGRATION_NOTE=''
           fi
           NOTES="${NAME} ${VERSION}
@@ -218,7 +218,7 @@ jobs:
           ## macOS
           1. Unzip \`${PREFIX}_${VERSION}_macOS.zip\` and drag the app to **Applications**.
           ${MIGRATION_NOTE}
-          3. Not notarized (no paid Apple Developer account), so macOS quarantines it on first download. Run this once in Terminal:
+          2. Not notarized (no paid Apple Developer account), so macOS quarantines it on first download. Run this once in Terminal:
              \`\`\`
              xattr -dr com.apple.quarantine "/Applications/${APP}"
              \`\`\`
@@ -226,9 +226,9 @@ jobs:
 
           gh release upload "$TAG" SHA256SUMS.txt --clobber
           if [ "$COMMANDS_CHANNEL" = beta ]; then
-            gh release edit "$TAG" --title "CommandS $TAG" --notes "$NOTES" --draft=false --prerelease --latest=false
+            gh release edit "$TAG" --title "MesTerm $TAG" --notes "$NOTES" --draft=false --prerelease --latest=false
           else
-            gh release edit "$TAG" --title "CommandS $TAG" --notes "$NOTES" --draft=false --prerelease=false --latest
+            gh release edit "$TAG" --title "MesTerm $TAG" --notes "$NOTES" --draft=false --prerelease=false --latest
           fi
 
       - name: Prune old releases (keep latest 5)

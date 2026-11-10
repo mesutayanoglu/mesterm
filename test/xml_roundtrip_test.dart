@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:commands/services/storage_service.dart';
-import 'package:commands/models/models.dart';
+import 'package:mesterm/services/storage_service.dart';
+import 'package:mesterm/models/models.dart';
 
 void main() {
   test('xml roundtrip with special chars', () {

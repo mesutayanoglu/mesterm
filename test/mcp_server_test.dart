@@ -1,17 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/models/models.dart';
-import 'package:commands/screens/settings_screen.dart';
-import 'package:commands/services/pty_session.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/models/models.dart';
+import 'package:mesterm/screens/settings_screen.dart';
+import 'package:mesterm/services/pty_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:commands/services/mcp_server.dart';
+import 'package:mesterm/services/mcp_server.dart';
 
 class _FakeGateway implements McpGateway {
   String? sent;

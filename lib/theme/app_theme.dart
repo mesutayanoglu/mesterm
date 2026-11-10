@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-/// CommandS palette — plain monochrome: white accent on near-black in dark
+/// MesTerm palette — plain monochrome: white accent on near-black in dark
 /// mode, black accent on near-white in light mode. No brand color riding on
 /// top, so the two themes stay genuinely black/white rather than a tinted
 /// version of one.

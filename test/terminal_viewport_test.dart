@@ -1,5 +1,5 @@
-import 'package:commands/services/terminal_appearance.dart';
-import 'package:commands/widgets/terminal_tabs.dart';
+import 'package:mesterm/services/terminal_appearance.dart';
+import 'package:mesterm/widgets/terminal_tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';

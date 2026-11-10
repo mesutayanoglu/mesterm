@@ -1,5 +1,5 @@
-import 'package:commands/services/mcp_server.dart';
-import 'package:commands/widgets/mcp_approval_dialog.dart';
+import 'package:mesterm/services/mcp_server.dart';
+import 'package:mesterm/widgets/mcp_approval_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

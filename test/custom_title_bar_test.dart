@@ -1,5 +1,5 @@
-import 'package:commands/theme/app_theme.dart';
-import 'package:commands/widgets/custom_title_bar.dart';
+import 'package:mesterm/theme/app_theme.dart';
+import 'package:mesterm/widgets/custom_title_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

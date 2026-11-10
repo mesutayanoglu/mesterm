@@ -73,13 +73,13 @@ IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
 #endif
 
 #ifdef COMMANDS_BETA
-#define APP_COMPANY "com.commands.beta"
-#define APP_PRODUCT "commands-beta"
-#define APP_EXE "beta_commands.exe"
+#define APP_COMPANY "com.mesterm.beta"
+#define APP_PRODUCT "mesterm-beta"
+#define APP_EXE "beta_mesterm.exe"
 #else
-#define APP_COMPANY "com.commands"
-#define APP_PRODUCT "commands"
-#define APP_EXE "commands.exe"
+#define APP_COMPANY "com.mesterm"
+#define APP_PRODUCT "mesterm"
+#define APP_EXE "mesterm.exe"
 #endif
 
 VS_VERSION_INFO VERSIONINFO
@@ -103,7 +103,7 @@ BEGIN
             VALUE "FileDescription", APP_PRODUCT "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", APP_PRODUCT "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.commands. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.mesterm. All rights reserved." "\0"
             VALUE "OriginalFilename", APP_EXE "\0"
             VALUE "ProductName", APP_PRODUCT "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

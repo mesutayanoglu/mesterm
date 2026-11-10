@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:commands/models/models.dart';
-import 'package:commands/services/rdm_import.dart';
+import 'package:mesterm/models/models.dart';
+import 'package:mesterm/services/rdm_import.dart';
 
 // IPs below are from the RFC 5737 documentation ranges (192.0.2.0/24,
 // 198.51.100.0/24) -- guaranteed never to be a real routable address.

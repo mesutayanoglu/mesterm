@@ -144,8 +144,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     final notes = info.plainNotes;
     return AppDialog(
       title: tr(info.channel == ReleaseChannel.beta
-          ? 'CommandS Beta {version} is available'
-          : 'CommandS {version} is available', {'version': info.version}),
+          ? 'MesTerm Beta {version} is available'
+          : 'MesTerm {version} is available', {'version': info.version}),
       icon: Icons.system_update_alt,
       width: 500,
       closable: !_busy,
@@ -240,8 +240,8 @@ class UpdateButton extends StatelessWidget {
         if (info == null) return const SizedBox.shrink();
         return Tooltip(
           message: tr(info.channel == ReleaseChannel.beta
-              ? 'CommandS Beta {version} is available'
-              : 'CommandS {version} is available', {'version': info.version}),
+              ? 'MesTerm Beta {version} is available'
+              : 'MesTerm {version} is available', {'version': info.version}),
           child: Material(
             // Filled, unlike everything else in the header: it is the one
             // control there that is not always present, and it should be

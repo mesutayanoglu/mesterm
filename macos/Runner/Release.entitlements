@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- App Sandbox is deliberately off. CommandS is an SSH/RDP client: it
+	<!-- App Sandbox is deliberately off. MesTerm is an SSH/RDP client: it
 	     spawns /usr/bin/ssh, which has to open outbound sockets and read the
 	     user's own ~/.ssh (known_hosts, keys, config, the agent socket). A
 	     sandboxed build gets a private container instead, so every saved key

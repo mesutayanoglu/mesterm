@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:commands/l10n/strings.dart';
-import 'package:commands/l10n/tr.dart';
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/screens/settings_screen.dart';
-import 'package:commands/widgets/connection_tree.dart';
-import 'package:commands/widgets/quick_connect_bar.dart';
+import 'package:mesterm/l10n/strings.dart';
+import 'package:mesterm/l10n/tr.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/screens/settings_screen.dart';
+import 'package:mesterm/widgets/connection_tree.dart';
+import 'package:mesterm/widgets/quick_connect_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,7 +53,7 @@ void main() {
     final used = _translatedLiterals();
     expect(used.length, greaterThan(150), reason: 'the scan itself must be finding the strings');
     // Names and formats that read the same in Turkish.
-    const same = {'SSH', 'RDP', 'JSON', 'XML', 'Port', 'CommandS', 'CSV (Excel/Sheets)'};
+    const same = {'SSH', 'RDP', 'JSON', 'XML', 'Port', 'MesTerm', 'CSV (Excel/Sheets)'};
     // Interpolated values (a size in pt) carry no wording to translate.
     final missing =
         used.where((s) => !turkish.containsKey(s) && !same.contains(s) && !s.startsWith(r'${')).toList()

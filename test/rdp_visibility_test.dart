@@ -1,7 +1,7 @@
 import 'dart:ui' as ui;
 
-import 'package:commands/models/models.dart';
-import 'package:commands/services/rdp_session.dart';
+import 'package:mesterm/models/models.dart';
+import 'package:mesterm/services/rdp_session.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 

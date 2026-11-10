@@ -1,8 +1,8 @@
-import 'package:commands/app_version.dart';
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/screens/settings_screen.dart';
-import 'package:commands/theme/app_theme.dart';
-import 'package:commands/widgets/quick_connect_bar.dart';
+import 'package:mesterm/app_version.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/screens/settings_screen.dart';
+import 'package:mesterm/theme/app_theme.dart';
+import 'package:mesterm/widgets/quick_connect_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

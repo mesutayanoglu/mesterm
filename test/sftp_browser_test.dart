@@ -1,5 +1,5 @@
-import 'package:commands/services/sftp_client.dart';
-import 'package:commands/widgets/sftp_browser.dart';
+import 'package:mesterm/services/sftp_client.dart';
+import 'package:mesterm/widgets/sftp_browser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

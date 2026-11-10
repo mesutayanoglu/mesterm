@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:commands/services/sftp_client.dart';
+import 'package:mesterm/services/sftp_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

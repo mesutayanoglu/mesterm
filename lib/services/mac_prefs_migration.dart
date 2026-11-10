@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Carries saved connections across the 1.0.24 sandbox change on macOS.
 ///
 /// Up to 1.0.23 the release build was sandboxed, so `NSUserDefaults` — where
-/// shared_preferences keeps everything CommandS stores — lived inside the
+/// shared_preferences keeps everything MesTerm stores — lived inside the
 /// app's container. Dropping the sandbox (an SSH client has to reach the
 /// network and the user's own ~/.ssh) moves those defaults to the normal
 /// `~/Library/Preferences` location, and an upgraded install would have come
@@ -22,7 +22,7 @@ class MacPrefsMigration {
   /// shared_preferences namespaces every key it writes.
   static const _prefix = 'flutter.';
 
-  static const _bundleId = 'com.commands.commands';
+  static const _bundleId = 'com.mesterm.mesterm';
 
   static Future<void> run() async {
     if (!Platform.isMacOS) return;

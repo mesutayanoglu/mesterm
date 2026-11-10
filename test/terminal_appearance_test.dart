@@ -1,6 +1,6 @@
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/screens/settings_screen.dart';
-import 'package:commands/services/terminal_appearance.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/screens/settings_screen.dart';
+import 'package:mesterm/services/terminal_appearance.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

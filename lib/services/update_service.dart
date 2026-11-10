@@ -8,7 +8,7 @@ import 'package:xml/xml.dart';
 
 import '../app_version.dart';
 
-/// Checks GitHub for a newer CommandS release and, on Windows, installs it.
+/// Checks GitHub for a newer MesTerm release and, on Windows, installs it.
 ///
 /// The repository is public, so the releases API is reachable without a token
 /// — which matters, because there is no credential this app could ship that
@@ -17,11 +17,11 @@ import '../app_version.dart';
 /// inside that even for an office full of people behind one address, and a
 /// check that does get refused fails silently like any other.
 class UpdateService {
-  static const _owner = 'emrhn0';
-  static const _repo = 'CommandS';
+  static const _owner = 'mesutayanoglu';
+  static const _repo = 'mesterm';
 
   /// GitHub rejects API requests without one.
-  static const _userAgent = 'CommandS-Updater';
+  static const _userAgent = 'MesTerm-Updater';
 
   /// Published by the release workflow: one `<sha256>  <filename>` line per
   /// build. Releases made before this file existed simply don't have it.
@@ -194,7 +194,7 @@ class UpdateService {
   ///   the running one is somewhere it cannot be replaced (see [_macTarget]).
   static Future<_Plan?> _plan(List<dynamic> assets, String tag, ReleaseChannel channel) async {
     // A beta ships under the same names: it is the same app.
-    const prefix = 'CommandS_';
+    const prefix = 'MesTerm_';
     final version = tag.substring(1);
     _Asset? find(String ending) {
       for (final raw in assets) {
@@ -347,7 +347,7 @@ class UpdateService {
     if (info.assetSize > 0 && size != info.assetSize) {
       return 'The download is incomplete.';
     }
-    if (size < 1024 * 1024) return 'The download does not look like a CommandS build.';
+    if (size < 1024 * 1024) return 'The download does not look like a MesTerm build.';
 
     // This ends by running what was just downloaded, so matching the checksum
     // published with the release is worth the extra request: size alone would
@@ -398,12 +398,12 @@ class UpdateService {
     final unzip = await Process.run(
         '$systemRoot${sep}System32${sep}tar.exe', ['-xf', zip.path, '-C', extractTo.path]);
     if (unzip.exitCode != 0) return 'Could not unpack the update.';
-    // The zip holds a single CommandS_<version>_windows_portable folder.
+    // The zip holds a single MesTerm_<version>_windows_portable folder.
     final folders = extractTo.listSync().whereType<Directory>().toList();
-    const executable = 'commands.exe';
+    const executable = 'mesterm.exe';
     if (folders.length != 1 ||
         !File('${folders.single.path}$sep$executable').existsSync()) {
-      return 'The update does not contain CommandS.';
+      return 'The update does not contain MesTerm.';
     }
 
     final script = File('${work.path}${sep}update.ps1');
@@ -468,7 +468,7 @@ Start-Process -FilePath (Join-Path $Target $Executable)
         .whereType<Directory>()
         .where((d) => d.path.endsWith('.app'))
         .toList();
-    const expectedApp = 'CommandS.app';
+    const expectedApp = 'MesTerm.app';
     if (fresh.length != 1 || !fresh.single.path.endsWith('/$expectedApp')) {
       return 'The update does not contain an app.';
     }
@@ -532,14 +532,14 @@ rm -rf "$WORK"
       }
     }
 
-    // .../CommandS.app/Contents/MacOS/CommandS
+    // .../MesTerm.app/Contents/MacOS/MesTerm
     final bundle = File(Platform.resolvedExecutable).parent.parent.parent;
     if (bundle.path.endsWith('.app') &&
         !bundle.path.contains('/AppTranslocation/') &&
         writable(bundle.parent.path)) {
       return bundle.path;
     }
-    const appBundle = 'CommandS.app';
+    const appBundle = 'MesTerm.app';
     if (writable('/Applications')) return '/Applications/$appBundle';
     final home = Platform.environment['HOME'];
     if (home != null) {

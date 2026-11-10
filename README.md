@@ -1,6 +1,8 @@
-# CommandS
+# MesTerm
 
-An original, native SSH/RDP connection manager for Windows and macOS. No
+MesTerm is based on [CommandS](https://github.com/emrhn0/CommandS) by emrhn0, used and developed further with the author's permission.
+
+A native SSH/RDP connection manager for Windows and macOS. No
 WebView: built with Flutter, rendered natively.
 
 ## Features
@@ -69,7 +71,7 @@ WebView: built with Flutter, rendered natively.
 ## ChatGPT Work (MCP)
 
 In **Settings > MCP integration**, turn on MCP access and copy the displayed
-URL. CommandS listens only on `127.0.0.1:8765`; the random path in the URL is
+URL. MesTerm listens only on `127.0.0.1:8765`; the random path in the URL is
 a secret, so keep the full URL private. The server is off by default and
 remembers the setting across launches.
 
@@ -78,14 +80,14 @@ remembers the setting across launches.
 - **Hosted ChatGPT Work:** run an [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
   on the same computer, targeting the displayed URL, then connect its tunnel
   ID to a private ChatGPT Work plugin. The desktop app and tunnel must be
-  running for commands to reach CommandS.
+  running for commands to reach MesTerm.
 
 Only SSH connections you allow one by one (right-click a connection) are
 offered, under anonymous names such as `DEVICE-01`. Every command asks you in
-CommandS before it runs; no answer within two minutes is a no. Terminal output
+MesTerm before it runs; no answer within two minutes is a no. Terminal output
 is sent as it is, so it can still show device names and addresses.
 
-The tools list the allowed connections, open one in a CommandS tab, send one
+The tools list the allowed connections, open one in a MesTerm tab, send one
 command line followed by Enter, and read terminal output. `send_command`
 returns a cursor; pass it to `read_output`, then keep using each returned
 cursor. Terminal output arrives asynchronously, so an empty read does not

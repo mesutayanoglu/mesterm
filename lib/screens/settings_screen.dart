@@ -263,7 +263,7 @@ class _LanguagePicker extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          tr('Applies to CommandS itself; sessions are not affected.'),
+          tr('Applies to MesTerm itself; sessions are not affected.'),
           style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
         ),
       ],
@@ -415,7 +415,7 @@ class _ThemeCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 const _bgPresets = [
-  Color(0xFF14161A), // CommandS default
+  Color(0xFF14161A), // MesTerm default
   Color(0xFF000000), // pure black
   Color(0xFF0C0C0C), // Windows Terminal black
   Color(0xFF1E1E1E), // VS Code dark
@@ -425,7 +425,7 @@ const _bgPresets = [
 ];
 
 const _fgPresets = [
-  Color(0xFFE8E6E1), // CommandS default
+  Color(0xFFE8E6E1), // MesTerm default
   Color(0xFFFFFFFF), // white
   Color(0xFF00FF00), // classic green phosphor
   Color(0xFFC9973A), // amber
@@ -1107,8 +1107,8 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
                   Expanded(
                     child: Text(
                       tr(info.channel == ReleaseChannel.beta
-                          ? 'CommandS Beta {version} is available'
-                          : 'CommandS {version} is available', {'version': info.version}),
+                          ? 'MesTerm Beta {version} is available'
+                          : 'MesTerm {version} is available', {'version': info.version}),
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -1167,7 +1167,7 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
               LinearProgressIndicator(value: p),
               const SizedBox(height: 10),
               Text(
-                tr('CommandS will close and reopen on the new version by itself.'),
+                tr('MesTerm will close and reopen on the new version by itself.'),
                 style: TextStyle(fontSize: 12, color: dim),
               ),
             ],

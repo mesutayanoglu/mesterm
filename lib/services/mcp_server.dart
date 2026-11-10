@@ -368,8 +368,8 @@ class McpServer extends ChangeNotifier {
                 ? requested
                 : '2025-11-25',
             'capabilities': {'tools': {}},
-            'serverInfo': {'name': 'commands', 'version': appVersion},
-            'instructions': 'Use only the connections listed; they have anonymous names. The user approves every command in CommandS before it runs, so a command can be refused. Open a session, send a single command, then read output using the returned cursor. Session output is asynchronous; poll read_output until the expected prompt or result appears. Never assume a command has finished just because one read returned no text.',
+            'serverInfo': {'name': 'mesterm', 'version': appVersion},
+            'instructions': 'Use only the connections listed; they have anonymous names. The user approves every command in MesTerm before it runs, so a command can be refused. Open a session, send a single command, then read output using the returned cursor. Session output is asynchronous; poll read_output until the expected prompt or result appears. Never assume a command has finished just because one read returned no text.',
           };
           break;
         case 'ping':
@@ -473,7 +473,7 @@ class McpServer extends ChangeNotifier {
     },
     {
       'name': 'open_connection',
-      'description': 'Open a saved SSH connection in a CommandS tab and return its tab_id.',
+      'description': 'Open a saved SSH connection in a MesTerm tab and return its tab_id.',
       'inputSchema': {
         'type': 'object',
         'properties': {

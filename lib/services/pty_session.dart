@@ -609,7 +609,7 @@ class PtySessionController implements TerminalSessionController {
     }
 
     if (Platform.isWindows) {
-      // Our own known_hosts, so CommandS neither reads nor fills in the
+      // Our own known_hosts, so MesTerm neither reads nor fills in the
       // user's ~/.ssh. %APPDATA% is expanded by the batch file at run time,
       // which keeps a non-ASCII profile path out of the file's own encoding.
       final hostsDir = Directory('${Platform.environment['APPDATA']}\\$appDataDirName');
@@ -702,7 +702,7 @@ class PtySessionController implements TerminalSessionController {
     _attachPty(generation, cleanUpEarly: true);
   }
 
-  static const _utf8SessionName = buildChannel == ReleaseChannel.beta ? 'CommandS-Beta-UTF8' : 'CommandS-UTF8';
+  static const _utf8SessionName = buildChannel == ReleaseChannel.beta ? 'MesTerm-Beta-UTF8' : 'MesTerm-UTF8';
   static bool? _utf8SessionReady;
 
   /// A PuTTY saved session pinned to UTF-8, so `-load` can pull it in;

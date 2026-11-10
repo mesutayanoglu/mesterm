@@ -1,7 +1,7 @@
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/services/login_watcher.dart';
-import 'package:commands/services/pty_session.dart';
-import 'package:commands/widgets/terminal_tabs.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/services/login_watcher.dart';
+import 'package:mesterm/services/pty_session.dart';
+import 'package:mesterm/widgets/terminal_tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';

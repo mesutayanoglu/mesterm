@@ -1,7 +1,7 @@
-import 'package:commands/models/models.dart';
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/theme/app_theme.dart';
-import 'package:commands/widgets/new_connection_dialog.dart';
+import 'package:mesterm/models/models.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/theme/app_theme.dart';
+import 'package:mesterm/widgets/new_connection_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';

@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:commands/services/serial_session.dart';
-import 'package:commands/services/session_controller.dart';
+import 'package:mesterm/services/serial_session.dart';
+import 'package:mesterm/services/session_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,7 +1,7 @@
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/screens/home_screen.dart';
-import 'package:commands/services/update_service.dart';
-import 'package:commands/theme/app_theme.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/screens/home_screen.dart';
+import 'package:mesterm/services/update_service.dart';
+import 'package:mesterm/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

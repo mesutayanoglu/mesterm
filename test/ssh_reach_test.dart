@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:commands/services/pty_session.dart';
+import 'package:mesterm/services/pty_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 String screen(PtySessionController c) {

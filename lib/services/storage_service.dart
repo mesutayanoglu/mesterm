@@ -126,7 +126,7 @@ class StorageService {
     List<SavedLayout> layouts = const [],
   }) {
     final doc = {
-      'app': 'CommandS',
+      'app': 'MesTerm',
       'version': 1,
       'folders': folders.map((f) => f.toJson()).toList(),
       'connections': connections.map((c) => c.toJson()).toList(),
@@ -157,7 +157,7 @@ class StorageService {
   }) {
     final builder = XmlBuilder();
     builder.processing('xml', 'version="1.0" encoding="UTF-8"');
-    builder.element('CommandS', attributes: {'version': '1'}, nest: () {
+    builder.element('MesTerm', attributes: {'version': '1'}, nest: () {
       builder.element('Folders', nest: () {
         for (final f in folders) {
           builder.element('Folder', attributes: {
@@ -327,7 +327,7 @@ class StorageService {
   }
 
   /// Parses a CSV with a header row. Column order and delimiter are
-  /// flexible: recognizes CommandS's own export, plain spreadsheets, and --
+  /// flexible: recognizes MesTerm's own export, plain spreadsheets, and --
   /// because these are the files that actually carry real passwords --
   /// RDM's own CSV export (`Group`, `ConnectionType`, `CredentialUserName`/
   /// `CredentialPassword`, comma-delimited) and mRemoteNG's CSV export

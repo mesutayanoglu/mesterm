@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:commands/theme/app_theme.dart';
+import 'package:mesterm/theme/app_theme.dart';
 
 void main() {
   testWidgets('themes build without throwing', (WidgetTester tester) async {

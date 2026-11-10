@@ -1,4 +1,4 @@
-import 'package:commands/widgets/terminal_clipboard.dart';
+import 'package:mesterm/widgets/terminal_clipboard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

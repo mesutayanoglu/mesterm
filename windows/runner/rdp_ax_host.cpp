@@ -53,7 +53,7 @@ ULONG PixelsToMillimetres(int pixels, int dpi) {
   return static_cast<ULONG>(std::max(10.0, std::min(10000.0, std::round(mm))));
 }
 
-const wchar_t kWindowClass[] = L"CommandSRdpAxHost";
+const wchar_t kWindowClass[] = L"MesTermRdpAxHost";
 bool g_class_registered = false;
 
 VARIANT VarBool(bool value) {
@@ -335,7 +335,7 @@ bool RdpAxHost::CreateControl(std::wstring* error) {
   }
 
   ole_object_->SetClientSite(static_cast<IOleClientSite*>(this));
-  ole_object_->SetHostNames(L"CommandS", L"CommandS");
+  ole_object_->SetHostNames(L"MesTerm", L"MesTerm");
   OleSetContainedObject(control_, TRUE);
 
   // Events have to be wired before Connect, or the first OnConnecting /

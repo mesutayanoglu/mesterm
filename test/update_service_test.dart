@@ -1,5 +1,5 @@
-import 'package:commands/app_version.dart';
-import 'package:commands/services/update_service.dart';
+import 'package:mesterm/app_version.dart';
+import 'package:mesterm/services/update_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -112,11 +112,11 @@ void main() {
 
   group('plainNotes', () {
     // Abridged from the real v1.1.1 release notes.
-    const notes = '''CommandS 1.1.1
+    const notes = '''MesTerm 1.1.1
 
 ## What's new
 
-**Automatic updates.** CommandS now checks for a new release when it starts.
+**Automatic updates.** MesTerm now checks for a new release when it starts.
 - **Windows:** "Update now" downloads the installer.
 - **macOS:** "Update now" downloads the new app.
 
@@ -126,9 +126,9 @@ void main() {
 - `..._Setup.exe` - installer. Recommended.
 
 ## macOS
-1. Unzip `CommandS_1.1.1_macOS.zip`.
+1. Unzip `MesTerm_1.1.1_macOS.zip`.
    ```
-   xattr -dr com.apple.quarantine /Applications/CommandS.app
+   xattr -dr com.apple.quarantine /Applications/MesTerm.app
    ```
 ''';
 
@@ -143,7 +143,7 @@ void main() {
 
     test('keeps what changed, as readable bullets', () {
       expect(plain, contains("What's new"));
-      expect(plain, contains('Automatic updates. CommandS now checks'));
+      expect(plain, contains('Automatic updates. MesTerm now checks'));
       expect(plain, contains('• Windows: "Update now" downloads the installer.'));
       expect(plain, contains('Upgrading from 1.0.25 or earlier: install this one by hand.'));
     });

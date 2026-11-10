@@ -23,7 +23,7 @@ class FeedbackService {
   @visibleForTesting
   static String compose(String message) {
     final os = Platform.isWindows ? 'Windows' : (Platform.isMacOS ? 'macOS' : Platform.operatingSystem);
-    return '${message.trim()}\n\n-- CommandS $appVersion, $os';
+    return '${message.trim()}\n\n-- MesTerm $appVersion, $os';
   }
 
   /// Replaced in tests, which must not post to the real form.

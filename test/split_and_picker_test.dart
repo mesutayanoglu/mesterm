@@ -1,10 +1,10 @@
-import 'package:commands/models/models.dart';
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/services/pane_layout.dart';
-import 'package:commands/services/session_controller.dart';
-import 'package:commands/widgets/folder_picker.dart';
-import 'package:commands/widgets/split_view_dialog.dart';
-import 'package:commands/widgets/terminal_clipboard.dart';
+import 'package:mesterm/models/models.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/services/pane_layout.dart';
+import 'package:mesterm/services/session_controller.dart';
+import 'package:mesterm/widgets/folder_picker.dart';
+import 'package:mesterm/widgets/split_view_dialog.dart';
+import 'package:mesterm/widgets/terminal_clipboard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

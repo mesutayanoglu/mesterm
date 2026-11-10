@@ -12,7 +12,7 @@ const double kTitleBarHeight = 32;
 
 /// Replaces the native Windows caption (which just shows the OS accent
 /// color — orange, in this case — behind plain system buttons) with one
-/// that matches CommandS's own theme. Spans the full window width, above
+/// that matches MesTerm's own theme. Spans the full window width, above
 /// the sidebar/terminal split.
 ///
 /// On macOS the same bar keeps the system traffic lights (restored in

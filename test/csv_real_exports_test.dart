@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:commands/services/storage_service.dart';
-import 'package:commands/models/models.dart';
+import 'package:mesterm/services/storage_service.dart';
+import 'package:mesterm/models/models.dart';
 
 // IPs and credentials below are entirely made up for the test -- the IPs
 // are from the RFC 5737 documentation ranges (192.0.2.0/24, 198.51.100.0/24),

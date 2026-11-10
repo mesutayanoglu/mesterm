@@ -52,7 +52,7 @@ void main() async {
       await windowManager.focus();
     },
   );
-  runApp(const CommandSApp());
+  runApp(const MesTermApp());
 }
 
 Future<SftpWindowArguments?> _sftpWindowArguments() async {
@@ -64,8 +64,8 @@ Future<SftpWindowArguments?> _sftpWindowArguments() async {
   }
 }
 
-class CommandSApp extends StatelessWidget {
-  const CommandSApp({super.key});
+class MesTermApp extends StatelessWidget {
+  const MesTermApp({super.key});
 
   /// One instance for the life of the app: this whole subtree rebuilds on
   /// every AppState change, and handing MaterialApp a fresh observer list each

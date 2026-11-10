@@ -1,4 +1,4 @@
-; CommandS - Inno Setup script.
+; MesTerm - Inno Setup script.
 ; No admin rights required (installs into the user profile). Payload folder
 ; is provided by CI in PayloadDir (build\windows\x64\runner\Release); for a
 ; local test build the default path below is used.
@@ -9,25 +9,25 @@
   #define PayloadDir "..\build\windows\x64\runner\Release"
 #endif
 #ifdef BetaBuild
-  #define AppIdentity "CommandS Beta"
-  #define AppExecutable "beta_commands.exe"
-  #define AppInstallerName "CommandS_Beta"
-  #define AppGuid "{{D94019C4-79D2-4C0C-9C84-61035E49EA02}"
+  #define AppIdentity "MesTerm Beta"
+  #define AppExecutable "beta_mesterm.exe"
+  #define AppInstallerName "MesTerm_Beta"
+  #define AppGuid "{{AD6544FC-CEC6-4659-BBBD-2BC0197B9DFD}"
 #else
-  #define AppIdentity "CommandS"
-  #define AppExecutable "commands.exe"
-  #define AppInstallerName "CommandS"
-  #define AppGuid "{{4C6F0A1E-7B2A-4E1B-9F0C-3A6D1C2E7B90}"
+  #define AppIdentity "MesTerm"
+  #define AppExecutable "mesterm.exe"
+  #define AppInstallerName "MesTerm"
+  #define AppGuid "{{80F3A706-4893-4411-8F59-48D4A59D1C7A}"
 #endif
 
 [Setup]
 AppId={#AppGuid}
 AppName={#AppIdentity}
 AppVersion={#MyAppVersion}
-; Shown in Settings > Apps as "CommandS v1.1.20" (default is "CommandS version 1.1.20").
+; Shown in Settings > Apps as "MesTerm v1.1.20" (default is "MesTerm version 1.1.20").
 AppVerName={#AppIdentity} v{#MyAppVersion}
 UninstallDisplayName={#AppIdentity} v{#MyAppVersion}
-AppPublisher=CommandS
+AppPublisher=MesTerm
 DefaultDirName={localappdata}\Programs\{#AppIdentity}
 DefaultGroupName={#AppIdentity}
 DisableProgramGroupPage=yes

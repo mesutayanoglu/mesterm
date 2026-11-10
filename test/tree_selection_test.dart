@@ -1,6 +1,6 @@
-import 'package:commands/models/models.dart';
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/widgets/connection_tree.dart';
+import 'package:mesterm/models/models.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/widgets/connection_tree.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

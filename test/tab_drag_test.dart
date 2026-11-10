@@ -1,8 +1,8 @@
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/services/pane_layout.dart';
-import 'package:commands/services/pty_session.dart';
-import 'package:commands/services/session_controller.dart';
-import 'package:commands/widgets/terminal_tabs.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/services/pane_layout.dart';
+import 'package:mesterm/services/pty_session.dart';
+import 'package:mesterm/services/session_controller.dart';
+import 'package:mesterm/widgets/terminal_tabs.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

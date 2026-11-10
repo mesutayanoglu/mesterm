@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:commands/services/storage_service.dart';
-import 'package:commands/models/models.dart';
+import 'package:mesterm/services/storage_service.dart';
+import 'package:mesterm/models/models.dart';
 
 void main() {
   final svc = StorageService();
@@ -44,7 +44,7 @@ void main() {
     expect(parsed.host, connection.host);
   });
 
-  test('csv import from a plain spreadsheet (no CommandS header)', () {
+  test('csv import from a plain spreadsheet (no MesTerm header)', () {
     const csv = 'Ad,Anamakine,Kullanıcı adı,Parola,Klasör\n'
         'HOST1,192.0.2.15,exampleadmin,ExamplePass2,EXAMPLE CORP\n';
     final parsed = svc.parseCsv(csv);

@@ -15,7 +15,7 @@ import 'tool_button.dart';
 
 /// The SFTP file manager in a window of its own: this computer's files beside
 /// the device's, over a window that can be moved and resized freely. It is a
-/// second window of the same CommandS, under the same taskbar button.
+/// second window of the same MesTerm, under the same taskbar button.
 ///
 /// Each window has its own Flutter engine, so what the new window needs to
 /// connect is handed to it as its launch arguments, in memory, within this
@@ -142,7 +142,7 @@ Future<void> runSftpWindow(SftpWindowArguments args) async {
   currentLanguage = AppLanguage.fromCode(args.language);
   try {
     await windowManager.ensureInitialized();
-    // CommandS's own title bar, as in the main window, not the system's.
+    // MesTerm's own title bar, as in the main window, not the system's.
     await windowManager.setTitleBarStyle(
       TitleBarStyle.hidden,
       windowButtonVisibility: defaultTargetPlatform == TargetPlatform.macOS,

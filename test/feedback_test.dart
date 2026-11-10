@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/screens/settings_screen.dart';
-import 'package:commands/services/feedback_service.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/screens/settings_screen.dart';
+import 'package:mesterm/services/feedback_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,7 +26,7 @@ void main() {
   test('only the message, the version and the OS are sent -- nothing that names the sender', () {
     final body = FeedbackService.compose('  Split view needs a 2x3 grid  ');
     expect(body, startsWith('Split view needs a 2x3 grid'));
-    expect(body, contains('CommandS v'));
+    expect(body, contains('MesTerm v'));
     final user = Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '\u0000';
     final machine = Platform.environment['COMPUTERNAME'] ?? Platform.localHostname;
     expect(body.toLowerCase(), isNot(contains(user.toLowerCase())));

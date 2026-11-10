@@ -1,13 +1,13 @@
 # AGENTS.md
 
-Notes for anyone working on CommandS, people and coding agents (Claude Code,
+Notes for anyone working on MesTerm, people and coding agents (Claude Code,
 Codex, Cursor...) alike. The README says what the app does. This file says how
 the code is organised, which decisions are deliberate, and the rules that keep
 a public repo safe.
 
 ## The project
 
-CommandS is a Flutter desktop app (Windows first, macOS second) that manages
+MesTerm is a Flutter desktop app (Windows first, macOS second) that manages
 SSH, RDP and serial connections. It runs real clients rather than
 reimplementing protocols:
 
@@ -62,7 +62,7 @@ Do not "simplify" these without reading why.
   - **Passwords** go through `SSH_ASKPASS`: a small script reads an env var.
     Nothing secret is written to disk or put on a command line. "(yes/no)"
     prompts are answered yes.
-  - **Known hosts** are kept in the app's own file under `%APPDATA%\CommandS`.
+  - **Known hosts** are kept in the app's own file under `%APPDATA%\MesTerm`.
   - **Host and username** are checked against strict patterns before they go
     into the batch launcher.
 - **A login question that reaches the terminal gets a bar** (`LoginWatcher`).
@@ -174,7 +174,7 @@ Do not "simplify" these without reading why.
      draft release;
    - writes `SHA256SUMS.txt` (the updater checks it);
    - publishes the release and keeps the latest five.
-5. Installed apps list the app as "CommandS vX.Y.Z" (`AppVerName` in
+5. Installed apps list the app as "MesTerm vX.Y.Z" (`AppVerName` in
    `installer.iss`).
 
 A `vX.Y.Z-beta.N` tag publishes a GitHub prerelease, without changing the

@@ -17,7 +17,7 @@ class RdmImportResult {
 
 /// True if [doc] looks like a Remote Desktop Manager / mRemoteNG-style export
 /// (top-level "Connections" array with PascalCase fields) rather than
-/// CommandS's own export format (lowercase "connections").
+/// MesTerm's own export format (lowercase "connections").
 bool looksLikeRdmExport(Map<String, dynamic> doc) => doc['Connections'] is List;
 
 /// Stable, non-random id for a folder path that has no explicit RDM group

@@ -1,9 +1,9 @@
-import 'package:commands/providers/app_state.dart';
-import 'package:commands/services/pty_session.dart';
-import 'package:commands/services/sftp_client.dart';
-import 'package:commands/widgets/sftp_browser.dart';
-import 'package:commands/widgets/sftp_window.dart';
-import 'package:commands/widgets/terminal_tabs.dart';
+import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/services/pty_session.dart';
+import 'package:mesterm/services/sftp_client.dart';
+import 'package:mesterm/widgets/sftp_browser.dart';
+import 'package:mesterm/widgets/sftp_window.dart';
+import 'package:mesterm/widgets/terminal_tabs.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
