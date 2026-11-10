@@ -47,8 +47,20 @@ abstract class McpGateway {
     bool wait = true,
     int timeoutMs = 15000,
     int maxChars = 8000,
+    String keep = 'both',
   });
-  Map<String, Object?> readOutput(String tabId, int cursor, {int maxChars = 8000});
+
+  /// With [offset]: [length] characters of the tab's last output (the whole
+  /// text of the last send_command or read_output answer, cut or not), to
+  /// read what a cut skipped. Without: the output since [cursor].
+  Map<String, Object?> readOutput(
+    String tabId,
+    int cursor, {
+    int maxChars = 8000,
+    String keep = 'both',
+    int? offset,
+    int? length,
+  });
   Map<String, Object?> readScreen(String tabId, {int lines = 200});
   void close();
 }
@@ -216,6 +228,7 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     bool wait = true,
     int timeoutMs = 15000,
     int maxChars = 8000,
+    String keep = 'both',
   }) async {
     if (command.isEmpty ||
         command.length > 4096 ||
@@ -227,6 +240,7 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     if (intent != 'read' && intent != 'change') {
       throw ArgumentError('intent must be "read" or "change".');
     }
+    _checkKeep(keep);
     final c = _terminal(tabId);
     if (c.status == SessionStatus.closed || c.status == SessionStatus.error) {
       throw StateError('Session is closed.');
@@ -272,15 +286,15 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
           if (i >= 0) b.lines[i].getText().trimRight(),
       ].join('\n')));
     }
-    final (text, cut) = keepTail(output, maxChars);
+    // Kept whole until the tab's next command, for read_output's offset.
+    _lastOutput[tabId] = output;
     return {
-      'output': text,
+      ...fitOutput(output, maxChars, keep),
       'prompt': prompt,
       'config_mode': isConfigPrompt(prompt),
       'timed_out': timedOut,
       'echo_found': echoFound,
       'status': c.status.name,
-      'truncated': cut,
       'cursor': capture?.end ?? 0,
       'asked_user': asked,
     };
@@ -501,30 +515,87 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   }
 
   @override
-  Map<String, Object?> readOutput(String tabId, int cursor, {int maxChars = 8000}) {
+  Map<String, Object?> readOutput(
+    String tabId,
+    int cursor, {
+    int maxChars = 8000,
+    String keep = 'both',
+    int? offset,
+    int? length,
+  }) {
+    _checkKeep(keep);
+    if (offset != null) {
+      _tab(tabId);
+      final last = _lastOutput[tabId];
+      if (last == null) throw StateError('No output kept for this tab yet: run send_command first.');
+      if (offset < 0 || offset > last.length) {
+        throw ArgumentError('offset must be from 0 to ${last.length} (total_chars).');
+      }
+      final take = (length ?? maxChars).clamp(1, 1000000);
+      final end = min(offset + take, last.length);
+      return {
+        'output': last.substring(offset, end),
+        'offset': offset,
+        'length': end - offset,
+        'total_chars': last.length,
+        'has_more': end < last.length,
+      };
+    }
     final capture = _capture(tabId);
     if (capture == null) throw StateError('Use read_screen for this tab.');
     if (cursor < 0 || cursor > capture.end) throw ArgumentError('Invalid output cursor.');
-    // Everything since the cursor, as text; past [maxChars], its end.
-    final (text, cut) = keepTail(stripPager(cleanTerminalText(capture.textFrom(cursor))), maxChars);
+    // Everything since the cursor, as text, fitted to [maxChars].
+    final text = stripPager(cleanTerminalText(capture.textFrom(cursor)));
+    _lastOutput[tabId] = text;
+    final fitted = fitOutput(text, maxChars, keep);
     return {
-      'output': text,
+      ...fitted,
       'cursor': capture.end,
-      'truncated': cut || cursor < capture.start,
+      'truncated': fitted['truncated'] == true || cursor < capture.start,
       'status': capture.controller.status.name,
       if (capture.controller.lastError != null) 'error': capture.controller.lastError,
     };
   }
 
-  /// [text], or its last [maxChars] characters (from a line start where one
-  /// is near), and whether anything was cut.
-  static (String, bool) keepTail(String text, int maxChars) {
+  /// The last answer's whole text per tab, until the tab's next command.
+  final _lastOutput = <String, String>{};
+
+  static void _checkKeep(String keep) {
+    if (keep != 'head' && keep != 'tail' && keep != 'both') {
+      throw ArgumentError('keep must be "head", "tail" or "both".');
+    }
+  }
+
+  /// [text] fitted to [maxChars]: whole if it fits; otherwise its start
+  /// ("head"), its end ("tail"), or half of each with a note of what was
+  /// left out between them ("both"). A cut answer says so (truncated), how
+  /// long the whole is (total_chars) and which part of it was skipped
+  /// (skipped_from to skipped_to, end exclusive), so read_output with
+  /// offset can fetch it without running the command again.
+  static Map<String, Object?> fitOutput(String text, int maxChars, String keep) {
     final limit = maxChars.clamp(100, 1000000);
-    if (text.length <= limit) return (text, false);
-    var tail = text.substring(text.length - limit);
-    final nl = tail.indexOf('\n');
-    if (nl >= 0 && nl < 200) tail = tail.substring(nl + 1);
-    return (tail, true);
+    final total = text.length;
+    if (total <= limit) return {'output': text, 'truncated': false};
+    final int from;
+    final int to;
+    final String shown;
+    switch (keep) {
+      case 'head':
+        from = limit;
+        to = total;
+        shown = text.substring(0, limit);
+      case 'tail':
+        from = 0;
+        to = total - limit;
+        shown = text.substring(total - limit);
+      default:
+        final head = limit ~/ 2;
+        final tail = limit - head;
+        from = head;
+        to = total - tail;
+        shown = '${text.substring(0, head)}\n... ${to - from} karakter atlandı ...\n${text.substring(total - tail)}';
+    }
+    return {'output': shown, 'truncated': true, 'total_chars': total, 'skipped_from': from, 'skipped_to': to};
   }
 
   @override
@@ -738,7 +809,7 @@ class McpServer extends ChangeNotifier {
                 : '2025-11-25',
             'capabilities': {'tools': {}},
             'serverInfo': {'name': 'mesterm', 'version': appVersion},
-            'instructions': 'MesTerm is an SSH, serial and RDP connection manager. list_connections finds saved connections (filter with folder, query, protocol, device; it returns at most limit, with total), list_sessions shows open tabs, open_connection opens one. send_command types a command and, by default, waits for the prompt and returns the command\'s own output, cleaned of escape codes and pager prompts, so no separate read_screen or read_output call is needed for it. Paging is turned off automatically on Aruba, Cisco, Palo Alto and Huawei. Say with each command whether it only reads (intent "read") or changes something (intent "change"). A read MesTerm also knows as read-only (show, display, get, ping and the like) runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it, and can be refused. Long output is cut to its end (max_chars, truncated). Usernames and passwords are never shared.',
+            'instructions': 'MesTerm is an SSH, serial and RDP connection manager. list_connections finds saved connections (filter with folder, query, protocol, device; it returns at most limit, with total), list_sessions shows open tabs, open_connection opens one. send_command types a command and, by default, waits for the prompt and returns the command\'s own output, cleaned of escape codes and pager prompts, so no separate read_screen or read_output call is needed for it. Paging is turned off automatically on Aruba, Cisco, Palo Alto and Huawei. Say with each command whether it only reads (intent "read") or changes something (intent "change"). A read MesTerm also knows as read-only (show, display, get, ping and the like) runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it, and can be refused. Long output is cut (max_chars; keep head, tail or both, default both) and says what was skipped (skipped_from, skipped_to); read_output with offset returns that part without running the command again. Usernames and passwords are never shared.',
           };
           break;
         case 'ping':
@@ -799,6 +870,8 @@ class McpServer extends ChangeNotifier {
           final timeout = args['timeout_ms'] ?? 15000;
           final maxChars = args['max_chars'] ?? 8000;
           if (maxChars is! int) throw ArgumentError('max_chars must be an integer.');
+          final keep = args['keep'] ?? 'both';
+          if (keep is! String) throw ArgumentError('keep must be "head", "tail" or "both".');
           if (wait is! bool) throw ArgumentError('wait must be true or false.');
           if (timeout is! int) throw ArgumentError('timeout_ms must be an integer.');
           value = await gateway.sendCommand(
@@ -808,6 +881,7 @@ class McpServer extends ChangeNotifier {
             wait: wait,
             timeoutMs: timeout,
             maxChars: maxChars,
+            keep: keep,
           );
           break;
         case 'read_output':
@@ -815,7 +889,20 @@ class McpServer extends ChangeNotifier {
           if (cursor is! int) throw ArgumentError('cursor must be an integer.');
           final maxChars = args['max_chars'] ?? 8000;
           if (maxChars is! int) throw ArgumentError('max_chars must be an integer.');
-          value = gateway.readOutput(_string(args, 'tab_id'), cursor, maxChars: maxChars);
+          final keep = args['keep'] ?? 'both';
+          if (keep is! String) throw ArgumentError('keep must be "head", "tail" or "both".');
+          final offset = args['offset'];
+          final length = args['length'];
+          if (offset != null && offset is! int) throw ArgumentError('offset must be an integer.');
+          if (length != null && length is! int) throw ArgumentError('length must be an integer.');
+          value = gateway.readOutput(
+            _string(args, 'tab_id'),
+            cursor,
+            maxChars: maxChars,
+            keep: keep,
+            offset: offset as int?,
+            length: length as int?,
+          );
           break;
         case 'read_screen':
           final lines = args['lines'] ?? 200;
@@ -895,7 +982,7 @@ class McpServer extends ChangeNotifier {
     },
     {
       'name': 'send_command',
-      'description': 'Type one line followed by Enter into a terminal tab (SSH or serial) and, by default (wait true), wait until the device prompt is back, then return the command\'s own output: no echoed command line, no closing prompt, no escape codes, no pager prompts. There is no need to call read_screen or read_output afterwards for the output. Returns output, prompt, config_mode, timed_out (the prompt did not come back within timeout_ms, default 15000; output is what came so far), truncated (longer than max_chars, default 8000: the end is kept), status and cursor. Before the first command in a tab MesTerm waits for the login to finish and answers a "Press any key to continue" banner; paging is turned off once per tab on Aruba/HPE, Cisco, Palo Alto and Huawei, and pager prompts are answered automatically. None of this is asked about or returned. intent says what the command does: "read" for one that only shows something, "change" for anything that changes the device or the host. A read that MesTerm also recognises as read-only runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it (the wait for the prompt starts after the answer), and a refusal is returned as an error. With wait false it returns at once, with only cursor and asked_user, as before.',
+      'description': 'Type one line followed by Enter into a terminal tab (SSH or serial) and, by default (wait true), wait until the device prompt is back, then return the command\'s own output: no echoed command line, no closing prompt, no escape codes, no pager prompts. There is no need to call read_screen or read_output afterwards for the output. Returns output, prompt, config_mode, timed_out (the prompt did not come back within timeout_ms, default 15000; output is what came so far), truncated, status and cursor. Output longer than max_chars (default 8000) is cut by keep: "head" keeps the start, "tail" the end, "both" (default) half of each with a "... N karakter atlandı ..." note between; a cut answer also has total_chars and skipped_from / skipped_to, the skipped range, which read_output with offset and length returns without running the command again (the whole output is kept until the tab\'s next command). Before the first command in a tab MesTerm waits for the login to finish and answers a "Press any key to continue" banner; paging is turned off once per tab on Aruba/HPE, Cisco, Palo Alto and Huawei, and pager prompts are answered automatically. None of this is asked about or returned. intent says what the command does: "read" for one that only shows something, "change" for anything that changes the device or the host. A read that MesTerm also recognises as read-only runs at once; anything else, and anything at a configuration prompt, waits for the user to allow it (the wait for the prompt starts after the answer), and a refusal is returned as an error. With wait false it returns at once, with only cursor and asked_user, as before.',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -908,19 +995,31 @@ class McpServer extends ChangeNotifier {
           'wait': {'type': 'boolean', 'default': true},
           'timeout_ms': {'type': 'integer', 'default': 15000, 'minimum': 100},
           'max_chars': {'type': 'integer', 'default': 8000, 'minimum': 100},
+          'keep': {
+            'type': 'string',
+            'enum': ['head', 'tail', 'both'],
+            'default': 'both',
+          },
         },
         'required': ['tab_id', 'command', 'intent'],
       },
     },
     {
       'name': 'read_output',
-      'description': 'All of an SSH tab\'s output since cursor (capture starts when the tab is first used through MCP), cleaned of escape codes and pager prompts. Longer than max_chars (default 8000): the end is kept and truncated is true. Returns output, the cursor for the next read, truncated and status. Not needed after send_command, which returns its output itself; use it after wait false, or for output that arrives later.',
+      'description': 'Two uses. With offset (and length, default max_chars): that part of the tab\'s last output, the whole text of the last send_command or read_output answer, kept until the tab\'s next command; use skipped_from as offset and skipped_to - skipped_from as length to read what a cut left out. Returns output, offset, length, total_chars and has_more. Without offset: all of an SSH tab\'s output since cursor (capture starts when the tab is first used through MCP), cleaned of escape codes and pager prompts, cut like send_command\'s (max_chars, keep, total_chars, skipped_from, skipped_to); returns output, the cursor for the next read, truncated and status. Not needed after send_command, which returns its output itself; use it after wait false, for output that arrives later, or for a skipped range.',
       'inputSchema': {
         'type': 'object',
         'properties': {
           'tab_id': {'type': 'string'},
           'cursor': {'type': 'integer', 'minimum': 0},
           'max_chars': {'type': 'integer', 'default': 8000, 'minimum': 100},
+          'keep': {
+            'type': 'string',
+            'enum': ['head', 'tail', 'both'],
+            'default': 'both',
+          },
+          'offset': {'type': 'integer', 'minimum': 0},
+          'length': {'type': 'integer', 'minimum': 1},
         },
         'required': ['tab_id'],
       },

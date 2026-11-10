@@ -45,6 +45,7 @@ class _FakeGateway implements McpGateway {
     bool wait = true,
     int timeoutMs = 15000,
     int maxChars = 8000,
+    String keep = 'both',
   }) async {
     if (tabId != 'session-01') throw ArgumentError('Unknown session');
     sent = command;
@@ -53,7 +54,14 @@ class _FakeGateway implements McpGateway {
   }
 
   @override
-  Map<String, Object?> readOutput(String tabId, int cursor, {int maxChars = 8000}) => {
+  Map<String, Object?> readOutput(
+    String tabId,
+    int cursor, {
+    int maxChars = 8000,
+    String keep = 'both',
+    int? offset,
+    int? length,
+  }) => {
     'output': 'ok',
     'cursor': cursor + 2,
     'status': 'running',
@@ -139,12 +147,13 @@ void main() {
       ]),
     );
     final send = tools.firstWhere((t) => t['name'] == 'send_command') as Map;
-    expect((send['inputSchema']['properties'] as Map).keys, containsAll(['wait', 'timeout_ms', 'max_chars', 'intent']));
+    expect((send['inputSchema']['properties'] as Map).keys, containsAll(['wait', 'timeout_ms', 'max_chars', 'intent', 'keep']));
     expect(send['description'], contains('no need to call read_screen'));
     final list = tools.firstWhere((t) => t['name'] == 'list_connections') as Map;
     expect((list['inputSchema']['properties'] as Map).keys, containsAll(['folder', 'query', 'protocol', 'device', 'limit']));
     final read = tools.firstWhere((t) => t['name'] == 'read_output') as Map;
-    expect((read['inputSchema']['properties'] as Map).keys, contains('max_chars'));
+    expect((read['inputSchema']['properties'] as Map).keys, containsAll(['max_chars', 'keep', 'offset', 'length']));
+    expect(send['description'], contains('skipped_from'));
 
     Future<Map<String, dynamic>> call(
       int id,
@@ -514,24 +523,79 @@ void main() {
       expect(result['output'], 'Interface   Status\nGi0/1   up\n\nend');
     });
 
-    test('past max_chars, the end of the output comes back, marked truncated', () async {
+    /// A device whose [command] prints lines 0 to [count] - 1.
+    Future<(String, PtySessionController, String)> longOutput({int count = 400}) async {
       final (tab, c, _) = await open('c1');
-      final lines = [for (var i = 0; i < 400; i++) 'line $i'].join('\r\n');
-      device(c, 'CORE-SW#', (cmd) => '$lines\r\n');
+      final lines = [for (var i = 0; i < count; i++) 'line $i'];
+      device(c, 'CORE-SW#', (cmd) => '${lines.join('\r\n')}\r\n');
+      return (tab, c, lines.join('\n'));
+    }
+
+    test('a long output keeps head and tail by default, says what it skipped, and read_output fetches it', () async {
+      final (tab, _, full) = await longOutput();
       final result = await gateway.sendCommand(tab, 'show log', intent: 'read', maxChars: 500);
       final output = result['output'] as String;
       expect(result['truncated'], isTrue);
-      expect(output.length, lessThanOrEqualTo(500));
-      expect(output, endsWith('line 399'), reason: 'the end is kept');
-      expect(output, isNot(contains('line 0\n')));
+      expect(result['total_chars'], full.length);
+      expect(output, startsWith('line 0\n'));
+      expect(output, endsWith('line 399'));
+      final from = result['skipped_from'] as int;
+      final to = result['skipped_to'] as int;
+      expect(output, contains('... ${to - from} karakter atlandı ...'));
+      expect(from, 250);
+      expect(full.length - to, 250, reason: 'half of max_chars each side');
 
-      final short = await gateway.sendCommand(tab, 'show clock', intent: 'read');
-      expect(short['truncated'], isFalse);
+      // The skipped part, without running the command again.
+      final skipped = gateway.readOutput(tab, 0, offset: from, length: to - from);
+      expect(skipped['output'], full.substring(from, to));
+      expect(skipped['total_chars'], full.length);
+      expect(skipped['has_more'], isTrue);
+      expect(full.substring(0, from) + (skipped['output'] as String) + full.substring(to), full,
+          reason: 'head + skipped + tail is the whole output');
+    });
 
-      final read = gateway.readOutput(tab, 0, maxChars: 300);
+    test('keep head and keep tail', () async {
+      final (tab, _, full) = await longOutput();
+      final head = await gateway.sendCommand(tab, 'show log', intent: 'read', maxChars: 300, keep: 'head');
+      expect(head['output'], full.substring(0, 300));
+      expect((head['skipped_from'], head['skipped_to']), (300, full.length));
+
+      final tail = await gateway.sendCommand(tab, 'show log', intent: 'read', maxChars: 300, keep: 'tail');
+      expect(tail['output'], full.substring(full.length - 300));
+      expect((tail['skipped_from'], tail['skipped_to']), (0, full.length - 300));
+
+      await expectLater(gateway.sendCommand(tab, 'show log', intent: 'read', keep: 'middle'), throwsArgumentError);
+    });
+
+    test('an output that fits is whole, with no skip fields', () async {
+      final (tab, _, _) = await longOutput(count: 3);
+      final result = await gateway.sendCommand(tab, 'show log', intent: 'read');
+      expect(result['truncated'], isFalse);
+      expect(result.containsKey('skipped_from'), isFalse);
+      expect(result.containsKey('total_chars'), isFalse);
+    });
+
+    test('the last output is kept until the next command in the tab', () async {
+      final (tab, c, full) = await longOutput();
+      expect(() => gateway.readOutput(tab, 0, offset: 0), throwsStateError, reason: 'nothing kept yet');
+      await gateway.sendCommand(tab, 'show log', intent: 'read', maxChars: 200);
+      expect(gateway.readOutput(tab, 0, offset: 0, length: 6)['output'], 'line 0');
+      expect(() => gateway.readOutput(tab, 0, offset: full.length + 1), throwsArgumentError);
+
+      device(c, 'CORE-SW#', (cmd) => 'new output\r\n');
+      await gateway.sendCommand(tab, 'show clock', intent: 'read');
+      expect(gateway.readOutput(tab, 0, offset: 0)['output'], 'new output', reason: 'replaced by the next command');
+    });
+
+    test('read_output since a cursor is cut the same way', () async {
+      final (tab, _, _) = await longOutput();
+      final sent = await gateway.sendCommand(tab, 'show log', intent: 'read', wait: false);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final read = gateway.readOutput(tab, sent['cursor'] as int, maxChars: 300);
       expect(read['truncated'], isTrue);
-      expect((read['output'] as String).length, lessThanOrEqualTo(300));
-      expect(read['cursor'], greaterThan(0));
+      expect(read['output'], contains('karakter atlandı'));
+      final skipped = gateway.readOutput(tab, 0, offset: read['skipped_from'] as int, length: 10);
+      expect(skipped['length'], 10);
     });
 
     test('a device that redraws the whole screen: each output is only its own command\'s', () async {

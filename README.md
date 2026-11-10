@@ -109,7 +109,10 @@ The tools:
 - `send_command` (`tab_id`, `command`, `intent`): by default waits for the
   prompt (`timeout_ms`, default 15000) and returns the command's own output,
   cleaned of escape codes and pager prompts, with `prompt`, `config_mode`,
-  `timed_out` and `truncated` (`max_chars`, default 8000, keeps the end).
+  `timed_out` and `truncated`. Output longer than `max_chars` (default 8000)
+  is cut by `keep`: `head`, `tail`, or `both` (default; half of each, with a
+  note of how much was skipped). A cut answer has `total_chars`,
+  `skipped_from` and `skipped_to`.
   Before the first command in a tab, MesTerm waits for the login and
   answers a "Press any key to continue" banner; paging is turned off once
   per tab on Aruba/HPE, Cisco, Palo Alto and Huawei, and pager prompts are
@@ -117,9 +120,12 @@ The tools:
   (ArubaOS-Switch), the output starts below the command's last echo;
   `echo_found: false` says no echo was found. `wait: false` returns just the cursor, as
   before.
-- `read_output` (an SSH tab's output since a cursor, cleaned, `max_chars`)
-  and `read_screen` (any terminal's text, its prompt and whether that is a
-  configuration prompt).
+- `read_output`: with `offset` and `length`, part of the tab's last output
+  (kept until its next command), so a skipped range is read without running
+  the command again; otherwise an SSH tab's output since a cursor, cleaned
+  and cut the same way.
+- `read_screen`: any terminal's text, its prompt and whether that is a
+  configuration prompt.
 
 RDP tabs are listed but cannot be read.
 
