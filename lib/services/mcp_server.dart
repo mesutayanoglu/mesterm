@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xterm/xterm.dart';
 
 import '../app_version.dart';
+import '../models/models.dart';
 import '../providers/app_state.dart';
 import '../widgets/device_icon.dart';
 import 'command_safety.dart';
@@ -59,6 +60,19 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
 
   /// Output captured per tab since the agent first used it.
   final _captures = <String, _CapturedSession>{};
+
+  /// Tabs whose paging was turned off, with the session it was done in (a
+  /// reconnected tab is a new session, and pages again).
+  final _pagingOff = <String, SessionController>{};
+
+  /// What turns paging off for this login only, by device kind. Not a
+  /// configuration change, so it is sent without asking.
+  static const pagingOffCommands = {
+    DeviceKind.aruba: 'no page',
+    DeviceKind.cisco: 'terminal length 0',
+    DeviceKind.paloalto: 'set cli pager off',
+    DeviceKind.huawei: 'screen-length 0 temporary',
+  };
 
   /// Ask about every command, reads included. Off by default.
   bool askEveryCommand = false;
@@ -208,6 +222,7 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
       final again = _terminal(tabId);
       if (!identical(again, c)) throw StateError('The session changed while the user decided.');
     }
+    await _turnPagingOff(tabId, c, capture);
     final cursor = capture?.end ?? 0;
     final startLine = c.terminal.buffer.absoluteCursorY;
     c.terminal.onOutput?.call('$command\r');
@@ -219,7 +234,7 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     final prompt = promptOf(c.terminal);
     final String output;
     if (capture != null) {
-      output = _commandOutput(capture.textFrom(cursor), command, prompt);
+      output = stripPager(_commandOutput(capture.textFrom(cursor), command, prompt));
     } else {
       // A serial console has no output stream: what came below the
       // command's line, up to the prompt.
@@ -242,6 +257,40 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     };
   }
 
+  /// Once a tab, before the agent's first command in it: the device's own
+  /// command for no paging, so long output comes whole. Its output is not
+  /// part of any answer.
+  Future<void> _turnPagingOff(String tabId, TerminalSessionController c, _CapturedSession? capture) async {
+    if (identical(_pagingOff[tabId], c)) return;
+    final tab = _tab(tabId);
+    final conn = app.connections.where((x) => x.id == tab.connectionId).firstOrNull;
+    final kind = conn == null ? null : DeviceIcon.of(conn);
+    final command = pagingOffCommands[kind];
+    // Unknown devices get nothing; the kind may be known by the next command.
+    if (command == null) return;
+    _pagingOff[tabId] = c;
+    c.terminal.onOutput?.call('$command\r');
+    await _waitForPrompt(c, capture, const Duration(seconds: 5), answerPager: false);
+  }
+
+  /// "--More--" and its kin, the way switches and firewalls page.
+  static final _pager = RegExp(
+    r'[ \t]*(?:<-+\s*more\s*-+>|-{2,4}\s*\(?more\)?\s*-{2,4})[ \t]*',
+    caseSensitive: false,
+  );
+
+  static bool isPagerLine(String line) => _pager.hasMatch(line);
+
+  /// [text] without the pager prompts that were answered while it came.
+  static String stripPager(String text) => text
+      .split('\n')
+      .where((l) => l.replaceAll(_pager, '').replaceAll(RegExp(r'[\s\x08]'), '').isNotEmpty || !_pager.hasMatch(l))
+      .map((l) => l.replaceAll(_pager, ''))
+      .join('\n');
+
+  /// At most this many pages are turned for one command.
+  static const maxPages = 50;
+
   static const _poll = Duration(milliseconds: 50);
 
   /// How long the output must stay still, with a prompt under the cursor,
@@ -259,7 +308,14 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
   /// Waits until something came back and the cursor rests on a prompt again
   /// (as read_screen sees it), with the output still for [_quiet]. True when
   /// [timeout] ran out first.
-  Future<bool> _waitForPrompt(TerminalSessionController c, _CapturedSession? capture, Duration timeout) async {
+  /// A pager prompt under the cursor is answered with a space ([maxPages] at
+  /// most), in case turning paging off did not take.
+  Future<bool> _waitForPrompt(
+    TerminalSessionController c,
+    _CapturedSession? capture,
+    Duration timeout, {
+    bool answerPager = true,
+  }) async {
     final started = DateTime.now();
     Object signature() {
       final b = c.terminal.buffer;
@@ -269,6 +325,8 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
     final first = signature();
     var last = first;
     var lastChange = started;
+    var pages = 0;
+    Object? answeredAt;
     while (true) {
       await Future<void>.delayed(_poll);
       final now = DateTime.now();
@@ -276,6 +334,13 @@ class AppMcpGateway extends ChangeNotifier implements McpGateway {
       if (sig != last) {
         last = sig;
         lastChange = now;
+      }
+      // One space per pager prompt: not again until the screen moved.
+      if (answerPager && pages < maxPages && sig != answeredAt && isPagerLine(promptOf(c.terminal))) {
+        answeredAt = sig;
+        pages++;
+        c.terminal.onOutput?.call(' ');
+        continue;
       }
       final moved = last != first;
       if (moved && now.difference(lastChange) >= _quiet && looksLikePrompt(promptOf(c.terminal))) return false;

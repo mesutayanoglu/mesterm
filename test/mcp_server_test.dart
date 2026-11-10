@@ -394,6 +394,79 @@ void main() {
       slow.close();
     });
 
+    test('paging is turned off once per tab, by device kind, without asking, out of the output', () async {
+      app.connections.first.device = DeviceKind.cisco;
+      final (tab, c, _) = await open('c1');
+      final sent = <String>[];
+      c.debugReceiveOutput('CORE-SW#');
+      c.writeOverride = (data) {
+        sent.add(data);
+        final command = data.replaceAll('\r', '');
+        final reply = command == 'terminal length 0' ? '' : 'ver 17.9\r\n';
+        Future<void>.delayed(const Duration(milliseconds: 20), () => c.debugReceiveOutput('$command\r\n${reply}CORE-SW#'));
+      };
+      final first = await gateway.sendCommand(tab, 'show version', intent: 'read');
+      await gateway.sendCommand(tab, 'show clock', intent: 'read');
+      expect(sent, ['terminal length 0\r', 'show version\r', 'show clock\r'], reason: 'once per tab');
+      expect(asked, isEmpty, reason: 'not a configuration change');
+      expect((first['output'] as String).replaceAll('\r', ''), 'ver 17.9');
+    });
+
+    test('an unknown device gets no paging command', () async {
+      final (tab, c, _) = await open('c1');
+      final sent = <String>[];
+      device(c, 'EDGE-FW>', (cmd) => 'ok\r\n');
+      final reply = c.writeOverride!;
+      c.writeOverride = (d) {
+        sent.add(d);
+        reply(d);
+      };
+      await gateway.sendCommand(tab, 'show clock', intent: 'read');
+      expect(sent, ['show clock\r']);
+    });
+
+    test('the paging commands, by device kind', () {
+      expect(AppMcpGateway.pagingOffCommands, {
+        DeviceKind.aruba: 'no page',
+        DeviceKind.cisco: 'terminal length 0',
+        DeviceKind.paloalto: 'set cli pager off',
+        DeviceKind.huawei: 'screen-length 0 temporary',
+      });
+    });
+
+    test('a pager prompt is answered with a space and left out of the output', () async {
+      final (tab, c, _) = await open('c1');
+      final sent = <String>[];
+      c.debugReceiveOutput('EDGE-FW>');
+      c.writeOverride = (data) {
+        sent.add(data);
+        if (data == ' ') {
+          Future<void>.delayed(const Duration(milliseconds: 20), () => c.debugReceiveOutput('\r\nline two\r\nEDGE-FW>'));
+        } else {
+          final command = data.replaceAll('\r', '');
+          Future<void>.delayed(
+            const Duration(milliseconds: 20),
+            () => c.debugReceiveOutput('$command\r\nline one\r\n --More-- '),
+          );
+        }
+      };
+      final result = await gateway.sendCommand(tab, 'show log', intent: 'read');
+      expect(sent, ['show log\r', ' ']);
+      final output = (result['output'] as String).replaceAll('\r', '');
+      expect(output, isNot(contains('More')));
+      expect(output, contains('line one'));
+      expect(output, contains('line two'));
+      expect(result['timed_out'], isFalse);
+    });
+
+    test('pager markers of the common devices are recognised', () {
+      for (final l in ['-- MORE --', '--More--', ' --More-- ', '<--- More --->', '---- More ----']) {
+        expect(AppMcpGateway.isPagerLine(l), isTrue, reason: l);
+      }
+      expect(AppMcpGateway.isPagerLine('SW#'), isFalse);
+      expect(AppMcpGateway.stripPager('a\n --More-- \nb'), 'a\nb');
+    });
+
     test('wait: false keeps the old answer: just the cursor', () async {
       final (tab, _, sent) = await open('c1');
       final result = await gateway.sendCommand(tab, 'show version', intent: 'read', wait: false);
