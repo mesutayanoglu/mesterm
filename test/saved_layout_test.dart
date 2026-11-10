@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:mesterm/models/models.dart';
 import 'package:mesterm/providers/app_state.dart';
+import 'package:mesterm/services/mac_rdp_session.dart';
 import 'package:mesterm/services/pane_layout.dart';
 import 'package:mesterm/services/rdp_session.dart';
 import 'package:mesterm/services/session_controller.dart';
@@ -97,7 +100,8 @@ void main() {
     expect(ids[1], open.id, reason: 'the already-open SSH tab is reused, not opened twice');
     final rdpTab = app.tabs.firstWhere((t) => t.id == ids[0]);
     expect(rdpTab.connectionId, rdp.id);
-    expect(rdpTab.controller, isA<RdpSessionController>());
+    expect(rdpTab.controller,
+        Platform.isWindows ? isA<RdpSessionController>() : isA<MacRdpSessionController>());
     expect(app.tabs.where((t) => t.connectionId == ssh1.id).length, 1);
     rdpTab.controller.dispose();
   });
